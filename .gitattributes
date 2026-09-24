@@ -1,0 +1,20 @@
+# 默认自动识别文本/二进制，并在检出时使用各平台原生换行
+* text=auto
+
+# 源码统一 LF
+*.py    text eol=lf
+*.pyw   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# Windows 批处理必须 CRLF，否则某些情况下会出问题
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# 二进制
+*.ico   binary
+*.png   binary
+*.exe   binary
