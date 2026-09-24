@@ -149,15 +149,27 @@ def security_check(stage: str):
 
 def make_zip(stage: str, out_dir: str):
     log("[4/4] 压缩…")
-    zip_path = os.path.join(out_dir, APP_NAME + ".zip")
-    if os.path.exists(zip_path):
-        os.remove(zip_path)
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+    try:
+        import giwifi
+        ver = getattr(giwifi, "VERSION", "")
+    except Exception:
+        ver = ""
+    # 文件名带上版本号：一来每个版本的文件名不同（好区分、不会被旧的覆盖搞混），
+    # 二来**避开一个真实的坑**（2026-09-24 踩到）：
+    # 桌面图标的位置记录在注册表 Bags 里、**以文件名为键**。
+    # 如果一直用同一个名字"先删再建"地覆盖它，那个名字的图标记录会失效，
+    # 表现为：文件明明在桌面上、图标列表里也有它，**但屏幕上就是画不出来**。
+    # 换个名字立刻恢复 —— 所以这里既带版本号，也改成原子替换（不删）。
+    name = APP_NAME + (("-v" + ver) if ver else "") + ".zip"
+    zip_path = os.path.join(out_dir, name)
+    tmp_path = zip_path + ".tmp"
+    with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for root, _dirs, files in os.walk(stage):
             for fn in sorted(files):
                 full = os.path.join(root, fn)
                 rel = os.path.join(APP_NAME, os.path.relpath(full, stage))
                 z.write(full, rel.replace("\\", "/"))
+    os.replace(tmp_path, zip_path)      # 原子替换，绝不"先删再建"
     log("      -> %s  (%.2f MB)" % (zip_path, os.path.getsize(zip_path) / 1048576))
     return zip_path
 
