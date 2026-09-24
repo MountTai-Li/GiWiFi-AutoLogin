@@ -16,6 +16,8 @@
     tray.start()                       # 起线程跑消息循环
     tray.notify("标题", "内容")         # 弹气泡
     tray.update_tooltip("新提示")
+    tray.set_visible(False)            # 临时把图标从托盘区撤掉（窗口和消息循环还在）
+    tray.set_visible(True)             # 再放回去，可反复切换
     tray.stop()
 
 要点：
@@ -184,6 +186,7 @@ class TrayIcon:
         self.menu_provider = menu_provider
         self.class_name = class_name or ("GiWiFiTrayWnd_%d" % id(self))
         self.available = bool(IS_WIN)
+        self.visible = False            # 图标当前是否真的在托盘区（见 set_visible）
         self._hwnd = None
         self._thread = None
         self._ready = threading.Event()
@@ -213,11 +216,42 @@ class TrayIcon:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout)
         self._hwnd = None
+        self.visible = False
 
     def update_tooltip(self, text):
         with self._lock:
             self.tooltip = text
         self._modify(NIF_TIP)
+
+    def set_visible(self, visible):
+        """
+        把托盘图标放上去 / 撤下来，**不销毁窗口和消息循环**，可以反复切换。
+
+        用途：程序同时存在「后台常驻实例」和「控制面板窗口」时，
+        两边各建一个图标会出现两个一模一样的 GiWiFi 图标。
+        解决办法是后台实例在控制面板打开期间把自己的图标撤掉，
+        窗口关掉后再放回来 —— 全程只有一个图标，且后台进程不受影响。
+
+        返回 True 表示当前状态已经是期望值。
+        """
+        nid = self._nid
+        if not nid or not self._hwnd:
+            return False
+        want = bool(visible)
+        if self.visible == want:
+            return True
+        try:
+            # 复位成基础标志位：notify() 会把 NIF_INFO 留在 uFlags 上，
+            # 直接拿去 NIM_ADD 会让系统把旧的气泡内容再弹一遍
+            nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
+            nid.szTip = self.tooltip[:127]
+            action = NIM_ADD if want else NIM_DELETE
+            ok = bool(_shell32.Shell_NotifyIconW(action, ctypes.byref(nid)))
+        except Exception:
+            return False
+        if ok:
+            self.visible = want
+        return ok
 
     def notify(self, title, text, flags=NIIF_INFO):
         """弹气泡通知"""
@@ -311,6 +345,7 @@ class TrayIcon:
                 _user32.DestroyWindow(hwnd)
                 self._ready.set()
                 return
+            self.visible = True
             self._ready.set()
 
             msg = wt.MSG()
@@ -319,10 +354,12 @@ class TrayIcon:
                 _user32.DispatchMessageW(ctypes.byref(msg))
 
             # 退出：删图标、销毁窗口
-            try:
-                _shell32.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(nid))
-            except Exception:
-                pass
+            if self.visible:
+                try:
+                    _shell32.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(nid))
+                except Exception:
+                    pass
+                self.visible = False
             try:
                 _user32.DestroyWindow(hwnd)
             except Exception:

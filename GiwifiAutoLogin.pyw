@@ -4,7 +4,9 @@ GiwifiAutoLogin.pyw —— GiWiFi 校园网自动登录助手（主程序）
 
 用法：
     pythonw GiwifiAutoLogin.pyw              打开控制面板（图形界面）
-    pythonw GiwifiAutoLogin.pyw --silent     纯后台监控，无界面（开机自启用这个）
+    pythonw GiwifiAutoLogin.pyw --silent     纯后台监控（开机自启用这个）
+                                             是否显示托盘图标由配置项
+                                             tray_on_autostart 决定
     python  GiwifiAutoLogin.pyw --once       只跑一次检测+登录，打印结果后退出
     python  GiwifiAutoLogin.pyw --diag       打印环境诊断信息
     python  GiwifiAutoLogin.pyw --test-login 用配置里的账号做一次真实登录测试
@@ -14,6 +16,8 @@ GiwifiAutoLogin.pyw —— GiWiFi 校园网自动登录助手（主程序）
     · 密码用 Windows DPAPI 加密存储，别人拷走 config.json 也解不开
     · 登录限频 + 失败退避，避免触发门户「操作过于频繁」限制
     · 单实例互斥，重复启动不会出现两个进程抢着登录
+    · 后台模式可选择挂一个系统托盘图标（右键即可操作），
+      且与窗口的托盘图标互斥，任何时候都只有一个图标
 """
 import os
 import queue
@@ -22,7 +26,14 @@ import threading
 import time
 import traceback
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    # ⚠ 打包成 exe 后 `__file__` 指向 PyInstaller 的**临时解包目录**（进程退出就被删掉）。
+    #   日志、退出标记、崩溃记录、图标都放那儿的话，事后什么也查不到，
+    #   而且「后台实例」和「控制面板」各自的临时目录不同，退出标记也传不过去。
+    #   所以统一用 **exe 所在目录**（和 giwifi.app_dir() / monitor 的日志路径一致）。
+    BASE = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    BASE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE)
 
 import giwifi      # noqa: E402
@@ -197,6 +208,107 @@ def _silent_log(msg):
 
 
 # --------------------------------------------------------------- 无界面模式
+def gui_running():
+    """
+    是否已有「控制面板」实例在运行。
+
+    控制面板启动时会创建并持有 `Global\\GiwifiAutoLogin.Gui` 互斥体直到进程结束，
+    所以这里能直接探到它 —— 用来避免后台实例和窗口同时各挂一个一模一样的托盘图标。
+    """
+    try:
+        import ctypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenMutexW.restype = ctypes.c_void_p
+        k32.OpenMutexW.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_wchar_p]
+        h = k32.OpenMutexW(0x00100000, False,          # SYNCHRONIZE
+                           "Global\\GiwifiAutoLogin.Gui")
+        if not h:
+            return False
+        k32.CloseHandle(ctypes.c_void_p(h))
+        return True
+    except Exception:
+        return False
+
+
+def open_main_window():
+    """从托盘/后台把控制面板叫起来（另起一个带界面的进程，不阻塞调用方）"""
+    try:
+        if getattr(sys, "frozen", False):
+            winutil.popen_detached([sys.executable], cwd=BASE)
+        else:
+            exe = winutil.pythonw_path() or sys.executable
+            winutil.popen_detached([exe, "-S", os.path.abspath(__file__)], cwd=BASE)
+        return True
+    except Exception as e:
+        _silent_log("打开控制面板失败: %s: %s" % (type(e).__name__, e))
+        return False
+
+
+def silent_tray(mon, tray_state):
+    """
+    后台模式的可选托盘图标（配置项 `tray_on_autostart` 为真时才有）。
+
+    菜单动作在**托盘线程**里执行，所以这里只做三件线程安全的事：
+    拨监控开关（mon 内部用事件/标志同步）、写退出标记、另起进程开窗口。
+    绝不能在托盘线程里弹模态框或做网络请求 —— 那会把托盘的消息循环卡死。
+    """
+    try:
+        import tray as tray_mod
+    except Exception as e:
+        _silent_log("托盘不可用（%s），继续纯后台运行" % e)
+        return None
+    if not tray_mod.is_supported():
+        return None
+
+    def tip():
+        return "%s · %s" % (APP_TITLE, tray_state.get("text", "运行中"))
+
+    def menu():
+        # 每次右键都重新取，所以菜单文字能反映「当前」是否在暂停
+        if mon.paused:
+            pause_key, pause_label = "resume", "恢复监控"
+        else:
+            pause_key, pause_label = "pause", "暂停监控"
+        return [("open", "打开主窗口"),
+                ("login", "立即登录"),
+                ("---", None),
+                (pause_key, pause_label),
+                ("---", None),
+                ("quit", "退出程序")]
+
+    def cmd(key):
+        if key == "open":
+            _silent_log("从托盘打开控制面板")
+            open_main_window()
+        elif key == "login":
+            mon.resume()
+            mon.wake()
+            _silent_log("从托盘手动触发一次检测与登录")
+        elif key == "pause":
+            mon.pause(True)
+            _silent_log("已暂停监控（从托盘）")
+        elif key == "resume":
+            mon.resume()
+            _silent_log("已恢复监控（从托盘）")
+        elif key == "quit":
+            _silent_log("从托盘退出程序")
+            request_quit_all()
+
+    try:
+        t = tray_mod.TrayIcon(
+            os.path.join(BASE, "giwifi.ico"), tip(),
+            on_command=cmd,
+            on_activate=open_main_window,        # 双击图标 = 打开窗口
+            menu_provider=menu)
+        if not t.start():
+            _silent_log("托盘图标创建失败，继续纯后台运行")
+            return None
+    except Exception as e:
+        _silent_log("托盘初始化异常: %s: %s" % (type(e).__name__, e))
+        return None
+    return t
+
+
 def run_silent():
     if ensure_silent():
         return 0                       # 已用 pythonw 静默重启
@@ -205,15 +317,33 @@ def run_silent():
         return 0
     clear_quit_flag()                  # 清掉可能残留的陈旧标记
     cfg = giwifi.load_config()
+
+    # 托盘提示文字用的「最近状态」（on_state 由监控线程回调，所以放在可变容器里）
+    tray_state = {"text": "启动中"}
+    tray_ref = {"t": None}
+
+    def on_state(s, d):
+        tray_state["text"] = s
+        t = tray_ref["t"]
+        if t and t.available:
+            t.update_tooltip("%s · %s" % (APP_TITLE, s))
+
     mon = monitor.Monitor(
         cfg,
         on_log=lambda lv, m: print("[%s] %s" % (lv, m), flush=True),
-        on_state=lambda s, d: None,
+        on_state=on_state,
         # 后台模式没有 tkinter，用原生消息框；放在独立线程里弹，
         # 绝不能让模态框把监控线程（重试 / 退出联动）一起卡住
         on_alert=lambda msg: (winutil.show_alert_async("GiWiFi 认证失败", msg),
                               _silent_log("认证失败已弹窗提示用户"))[0])
     mon.start()
+
+    # 托盘默认不开（保持完全静默）；用户在控制面板里勾选后，开机自启就带着图标起来
+    want_tray = bool(cfg.get("tray_on_autostart"))
+    if want_tray:
+        tray_ref["t"] = silent_tray(mon, tray_state)
+        if tray_ref["t"]:
+            _silent_log("已按设置显示托盘图标（右键：打开窗口 / 立即登录 / 退出）")
     print("GiWiFi 自动登录已在后台运行（Ctrl+C 退出）")
     try:
         while True:
@@ -222,11 +352,26 @@ def run_silent():
                 clear_quit_flag()
                 _silent_log("收到控制面板发来的退出请求，正在退出")
                 break
+            # 控制面板自己也带托盘图标，两份同时挂着会出现两个一样的图标：
+            # 窗口在的时候先把自己这份撤掉，窗口关掉后再放回来。
+            t = tray_ref["t"]
+            if want_tray and t and t.available:
+                want_visible = not gui_running()
+                if t.visible != want_visible and t.set_visible(want_visible):
+                    t.update_tooltip("%s · %s" % (APP_TITLE, tray_state["text"]))
+                    _silent_log("控制面板已%s，后台托盘图标已%s"
+                                % ("打开" if not want_visible else "关闭",
+                                   "隐藏" if not want_visible else "恢复"))
     except KeyboardInterrupt:
         print("\n已退出。")
     finally:
         try:
             mon.stop()
+        except Exception:
+            pass
+        try:
+            if tray_ref["t"]:
+                tray_ref["t"].stop()
         except Exception:
             pass
     return 0
@@ -292,6 +437,9 @@ def run_diag():
     print("账号已配置     :", bool(cfg.get("username")))
     print("密码已配置     :", bool(secure_store.get_password(cfg)))
     print("开机自启       :", "已开启" if autostart.is_enabled() else "未开启")
+    print("自启显示托盘   :", "开启（开机后托盘区有图标，可右键操作）"
+          if cfg.get("tray_on_autostart") else "关闭（开机后完全静默）")
+    print("控制面板在运行 :", "是" if gui_running() else "否")
     print("桌面目录       :", autostart.desktop_dir())
     print()
     print("-- 位置信息相关 --")
@@ -591,11 +739,22 @@ class App:
         self.btn_auto = mkbtn("", self.on_toggle_autostart, col=1, row=1)
         mkbtn("退出程序", self.on_quit, col=2, row=1)
 
+        # 「开机自启后显示托盘图标」：勾上 = 开机后托盘区能看到图标并可右键操作；
+        # 不勾 = 完全静默（旧行为）。勾选即写盘，不用再点「保存并应用」。
+        self.var_tray_auto = tk.IntVar(value=0)
+        self.chk_tray_auto = tk.Checkbutton(
+            btns, text="开机自启后显示托盘图标（右键可打开窗口 / 立即登录 / 退出）",
+            variable=self.var_tray_auto, command=self.on_toggle_tray_autostart,
+            bg=BG, fg=FG_DIM, activebackground=BG, activeforeground=FG,
+            selectcolor=CARD, font=("Microsoft YaHei UI", 8), bd=0,
+            highlightthickness=0, cursor="hand2", anchor="w")
+        self.chk_tray_auto.grid(row=2, column=0, columnspan=3, sticky="w")
+
         # 保存结果就地提示（不弹窗打扰）：让「已落盘、重启也在」这件事看得见
         self.lb_save_hint = tk.Label(
             btns, text="配置改动会立即写入本机，关机重启后依然生效",
             bg=BG, fg=FG_DIM, anchor="w", font=("Microsoft YaHei UI", 8))
-        self.lb_save_hint.grid(row=2, column=0, columnspan=3, sticky="w",
+        self.lb_save_hint.grid(row=3, column=0, columnspan=3, sticky="w",
                                pady=(2, 0))
 
         # --- 日志
@@ -642,6 +801,9 @@ class App:
         # 「记住并自动连接」
         self.var_remember.set(1 if self.cfg.get("auto_connect_wifi") else 0)
         self._sync_remember_state()
+
+        # 「开机自启后显示托盘图标」
+        self.var_tray_auto.set(1 if self.cfg.get("tray_on_autostart") else 0)
 
     def _sync_remember_state(self):
         """
@@ -888,6 +1050,8 @@ class App:
         # 「记住并自动连接」：勾上且选定了具体 WiFi 才生效
         remember = bool(self.var_remember.get()) and bool(wifi)
         new_cfg["auto_connect_wifi"] = remember
+        # 「开机自启后显示托盘图标」
+        new_cfg["tray_on_autostart"] = bool(self.var_tray_auto.get())
         if remember:
             # 自动连接需要本机已保存的无线配置文件；没有就提前告诉用户
             prof = (new_cfg.get("wifi_profile") or "").strip() or giwifi.find_profile_for(wifi)
@@ -970,6 +1134,34 @@ class App:
             self._append_log("OK" if ok else "ERROR",
                              "已设置开机自启（后台静默启动）" if ok else "设置失败: %s" % msg)
         self._refresh_autostart_btn()
+
+    def on_toggle_tray_autostart(self):
+        """
+        「开机自启后显示托盘图标」—— 勾选 / 取消**立即写盘**，
+        不用再点「保存并应用」（与本程序「改动立即落盘」的一贯口径一致）。
+
+        ⚠ 这个设置管的是**开机自启的那个后台实例**：
+          当前窗口本来就有托盘图标，所以在这里看不到变化；
+          它要等下次开机（或下次用 --silent 启动）才体现出来。
+        """
+        val = bool(self.var_tray_auto.get())
+        try:
+            self.cfg["tray_on_autostart"] = val
+            giwifi.save_config(self.cfg)
+        except Exception as e:
+            self._append_log("ERROR", "保存托盘设置失败: %s" % e)
+            return
+        import autostart
+        if val:
+            if autostart.is_enabled():
+                tail = "下次开机自启后，托盘区会出现图标（右键打开窗口 / 立即登录 / 退出）"
+            else:
+                tail = "已保存；但「开机自启」当前是关闭的，开启后即可生效"
+            self._append_log("OK", "开机自启显示托盘：已开启 —— " + tail)
+        else:
+            self._append_log("OK", "开机自启显示托盘：已关闭 —— "
+                                   "开机后完全静默，托盘区不留图标")
+        self._flash_saved()
 
     def _refresh_autostart_btn(self):
         import autostart

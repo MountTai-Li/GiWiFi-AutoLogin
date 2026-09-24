@@ -30,7 +30,7 @@ from html.parser import HTMLParser
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import aes128  # noqa: E402
 
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36")
@@ -533,6 +533,12 @@ DEFAULT_CONFIG = {
     "ssid_query_interval": 0,
     "ssid_display_interval": 120,   # 界面显示「当前 WiFi」的刷新间隔（窗口隐藏时不刷新）
     "wifi_profile": "",             # 自动连接用的无线配置文件名称
+    # --- 开机自启（后台 --silent）时是否也显示系统托盘图标 ---
+    # False（默认）= 完全静默，托盘区不留任何图标（旧行为）；
+    # True         = 开机后立刻出现一个托盘图标，右键可「打开主窗口 /
+    #                立即登录 / 暂停监控 / 退出程序」，双击可打开窗口。
+    # 注意：打开控制面板后托盘图标由窗口接管，不会出现两个图标。
+    "tray_on_autostart": False,
     "log_file": "giwifi.log",
     "probe_urls": [
         "http://connect.rom.miui.com/generate_204",
