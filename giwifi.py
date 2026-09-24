@@ -30,7 +30,7 @@ from html.parser import HTMLParser
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import aes128  # noqa: E402
 
-VERSION = "1.11.0"
+VERSION = "1.12.0"
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36")
@@ -524,6 +524,13 @@ DEFAULT_CONFIG = {
     "alert_after_fails": 1,         # 连续失败几次弹提示告知用户；0=不弹，1=首次就弹
     "wifi_ssid": "",                # 绑定宿舍 WiFi 名称；留空表示不限制
     "ensure_wifi_on": True,         # 启动后自动打开 Wi-Fi 开关（无线电）
+    # --- Wi-Fi 开关（无线电）的处理策略（v1.12）---
+    # "startup"（默认）：**只在程序启动那一刻**帮用户打开一次（= 开机自动开 Wi-Fi）；
+    #                     之后用户再手动关掉，就尊重用户，绝不再打开 ——
+    #                     旧版本每 45 秒就会替用户打开一次，等于跟用户对着干。
+    # "always"        ：发现关着就打开（v1.11 及以前的老行为）
+    # "never"         ：永远不碰开关（等价于 ensure_wifi_on=false）
+    "wifi_radio_policy": "startup",
     "auto_connect_wifi": True,      # 没连上指定 WiFi 时自动连过去
     # --- 位置信息节流（查当前 SSID / 扫描 WiFi 都会被记成一次位置访问）---
     # 「不限制 WiFi」时程序**完全不查** SSID，这两项只在下面两种情况生效：

@@ -68,6 +68,7 @@ STATE_COLOR = {
     monitor.S_FAIL:     RED,
     monitor.S_NO_PORTAL: YELLOW,
     monitor.S_NO_WIFI:  YELLOW,
+    monitor.S_WIFI_OFF: YELLOW,
     monitor.S_PAUSED:   FG_DIM,
     monitor.S_NOPWD:    RED,
 }
@@ -473,6 +474,18 @@ def run_diag():
         print("Wi-Fi 开关     :", ("开着" if (_r and not _m) else (_m or "已打开")))
     except Exception as e:
         print("Wi-Fi 开关     : 查询失败", type(e).__name__, e)
+    print("Wi-Fi 开关策略  :", cfg.get("wifi_radio_policy", "startup"),
+          "（startup=只在启动时打开一次；之后用户关掉就不再打开）")
+    try:
+        import wlanapi
+        _rs = wlanapi.radio_state()
+        _ls = wlanapi.wifi_link_state()
+        print("Wi-Fi 开关状态  :", {True: "开", False: "关（用户自己关的，程序不会打开）",
+                                    None: "查不到"}[_rs])
+        print("Wi-Fi 链路状态  :", {"up": "已连上某个 WiFi", "linking": "已关联、正在获取 IP",
+                                    "down": "未连接任何 WiFi", None: "查不到"}[_ls])
+    except Exception as e:
+        print("Wi-Fi 状态查询  : 失败", type(e).__name__, e)
     print("自动开 Wi-Fi   :", cfg.get("ensure_wifi_on", True))
     print("自动连 WiFi    :", cfg.get("auto_connect_wifi", True),
           "| 配置文件:", cfg.get("wifi_profile") or "(运行时自动解析)")
@@ -497,10 +510,13 @@ def run_diag():
     print("-- 位置信息相关 --")
     print("    说明：Windows 把「读 Wi-Fi 信息」视为一次位置访问。")
     print("    会触发的调用：查当前 SSID / 扫描附近 WiFi / netsh wlan connect")
-    print("    不会触发    ：读 Wi-Fi 开关状态、枚举网卡、netsh wlan show profiles")
+    print("    不会触发    ：读 Wi-Fi 开关状态、判断链路是否连上（GetAdaptersAddresses）、")
+    print("                  探测认证网关是否可达（纯 TCP）、枚举网卡、netsh wlan show profiles")
     _want = (cfg.get("wifi_ssid") or "").strip()
     print("    WiFi 限定      :", _want or "不限制（监控循环完全不查 SSID，零位置访问）")
-    print("    SSID 查询间隔  :", cfg.get("ssid_query_interval", 60), "秒（仅限定 WiFi 时生效）")
+    print("    判断在不在校园网: 用「认证网关是否可达」（纯 TCP，零位置访问）")
+    print("    SSID 查询间隔  :", cfg.get("ssid_query_interval", 60), "秒（0=不周期性查；")
+    print("                     v1.12 起联网稳态完全不查，只有确认连接结果时才查一次）")
     print("    界面显示间隔   :", cfg.get("ssid_display_interval", 120), "秒（窗口隐藏时不刷新）")
     print("    启动自动扫描   : 已关闭（下拉列表只在展开/点刷新时扫）")
     print()

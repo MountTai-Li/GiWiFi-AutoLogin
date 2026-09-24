@@ -399,6 +399,214 @@ def ensure_radio_on():
 #    —— 因为「连接」这个动作本身才是让网络变就绪的原因。
 
 
+# ------------------------------------------------------------------ 「开关」与
+# 「有没有连上」的零位置访问判断
+#
+# ⚠ 背景（很重要）：Windows 把「**读取 Wi-Fi 信息**」算作一次位置访问。
+#   实测 `WlanQueryInterface(wlan_intf_opcode_current_connection)`（取当前 SSID）
+#   会触发，而下面这两个判断**不会**，因为它们问的都不是"Wi-Fi 的细节"：
+#     · 无线电开关：wlan_intf_opcode_radio_state（实测不触发）
+#     · 是否已连上：走 IP Helper 的 GetAdaptersAddresses，只问 IP 层网卡起没起来
+#   监控循环每 10 秒就跑一次，所以必须用这两个零成本判断，
+#   把昂贵的「取 SSID」留到真正需要它的时候（掉线、准备登录）。
+
+IF_TYPE_IEEE80211 = 71
+IF_OPER_STATUS_UP = 1
+AF_INET = 2
+AF_INET6 = 23
+AF_UNSPEC = 0
+_GAA_FLAG_SKIP_ANYCAST = 0x02
+_GAA_FLAG_SKIP_MULTICAST = 0x04
+_GAA_FLAG_SKIP_DNS_SERVER = 0x08
+_ERROR_BUFFER_OVERFLOW = 111
+_ERROR_NO_DATA = 232
+
+
+class SOCKET_ADDRESS(ctypes.Structure):
+    _fields_ = [("lpSockaddr", ctypes.c_void_p),
+                ("iSockaddrLength", ctypes.c_int)]
+
+
+class IP_ADAPTER_UNICAST_ADDRESS(ctypes.Structure):
+    pass
+
+
+IP_ADAPTER_UNICAST_ADDRESS._fields_ = [
+    ("Length", wt.ULONG),
+    ("Flags", wt.DWORD),
+    ("Next", ctypes.POINTER(IP_ADAPTER_UNICAST_ADDRESS)),
+    ("Address", SOCKET_ADDRESS),
+    ("PrefixOrigin", ctypes.c_int),
+    ("SuffixOrigin", ctypes.c_int),
+    ("DadState", ctypes.c_int),
+    ("ValidLifetime", wt.ULONG),
+    ("PreferredLifetime", wt.ULONG),
+    ("LeaseLifetime", wt.ULONG),
+    ("OnLinkPrefixLength", ctypes.c_ubyte),
+]
+
+
+class IP_ADAPTER_ADDRESSES(ctypes.Structure):
+    pass
+
+
+IP_ADAPTER_ADDRESSES._fields_ = [
+    ("Length", wt.ULONG),
+    ("IfIndex", wt.DWORD),
+    ("Next", ctypes.POINTER(IP_ADAPTER_ADDRESSES)),
+    ("AdapterName", ctypes.c_char_p),
+    ("FirstUnicastAddress", ctypes.POINTER(IP_ADAPTER_UNICAST_ADDRESS)),
+    ("FirstAnycastAddress", ctypes.c_void_p),
+    ("FirstMulticastAddress", ctypes.c_void_p),
+    ("FirstDnsServerAddress", ctypes.c_void_p),
+    ("DnsSuffix", ctypes.c_wchar_p),
+    ("Description", ctypes.c_wchar_p),
+    ("FriendlyName", ctypes.c_wchar_p),
+    ("PhysicalAddress", ctypes.c_ubyte * 8),
+    ("PhysicalAddressLength", wt.ULONG),
+    ("Flags", wt.ULONG),
+    ("Mtu", wt.ULONG),
+    ("IfType", wt.DWORD),
+    ("OperStatus", ctypes.c_int),
+]
+
+
+def _iphlpapi():
+    try:
+        d = ctypes.WinDLL("iphlpapi", use_last_error=True)
+        d.GetAdaptersAddresses.argtypes = [wt.ULONG, wt.ULONG, ctypes.c_void_p,
+                                           ctypes.POINTER(IP_ADAPTER_ADDRESSES),
+                                           ctypes.POINTER(wt.ULONG)]
+        d.GetAdaptersAddresses.restype = wt.ULONG
+        return d
+    except Exception:
+        return None
+
+
+_iphlp = _iphlpapi() if AVAILABLE else None
+
+
+def radio_state():
+    """
+    只读 Wi-Fi 无线电（开关）状态：True=开着 / False=关着 / None=查不到。
+
+    **不涉及位置信息**（实测），所以在监控循环里可以每 10 秒问一次 ——
+    这正是"用户手动关掉 Wi-Fi 时不要自作主张去打开"所依赖的信号。
+    """
+    if not AVAILABLE:
+        return None
+    handle, _rc = _open()
+    if handle is None:
+        return None
+    try:
+        guid = _interface_guid(handle)
+        if guid is None:
+            return None
+        st, _rc2 = _read_radio_state(handle, guid)
+        if st is None:
+            return None
+        n = min(int(st.dwNumberOfPhys), 64)
+        if n == 0:
+            return None
+        return all(st.PhyRadioState[i].dot11SoftwareRadioState == DOT11_RADIO_STATE_ON
+                   for i in range(n))
+    except Exception:
+        return None
+    finally:
+        try:
+            _wlan.WlanCloseHandle(handle, None)
+        except Exception:
+            pass
+
+
+def _has_ipv4(adapter):
+    """这个网卡有没有拿到 IPv4 地址（地址还在不在有效期内不看，够用就行）"""
+    p = adapter.FirstUnicastAddress
+    seen = 0
+    while p and seen < 32:                     # 防御性上限，避免链表异常时死循环
+        try:
+            sa = p.contents.Address
+            if sa.lpSockaddr:
+                fam = ctypes.cast(sa.lpSockaddr,
+                                  ctypes.POINTER(ctypes.c_ushort)).contents.value
+                if fam == AF_INET:
+                    return True
+        except Exception:
+            return False
+        p = p.contents.Next
+        seen += 1
+    return False
+
+
+def _is_virtual_wifi(a):
+    """
+    是不是「Wi-Fi Direct 虚拟网卡」。
+
+    ⚠ 本机实测踩坑：Intel 网卡会额外挂两个
+    `Microsoft Wi-Fi Direct Virtual Adapter`，它们的 IfType 同样是 71（IEEE802.11），
+    但状态常年是 Down。如果按「遇到第一个 802.11 就下结论」写，
+    就永远得到"没连上"——**真实的物理网卡排在它们后面**。
+    所以要先认出来并跳过（它们只在投屏/Miracast 时才 Up）。
+    """
+    d = ("%s %s" % (a.Description or "", a.FriendlyName or "")).lower()
+    return ("virtual" in d) or ("direct" in d) or ("虚拟" in d)
+
+
+def wifi_link_state():
+    """
+    判断「Wi-Fi 到底连上没有」——**不涉及位置信息、不起子进程**。
+
+    走 IP Helper 的 GetAdaptersAddresses，找类型为 IEEE 802.11 的**物理**适配器，
+    看它的 OperStatus 与有没有 IPv4 地址：
+
+        "up"       已关联且拿到 IPv4（已经连上某个 WiFi）
+        "linking"  已关联但还没拿到地址（正在获取 IP —— 别去打断它）
+        "down"     没连上任何 WiFi（断开，或无线电关着）
+        None       查不到（没有无线网卡 / 系统调用失败）
+
+    为什么不用 WLAN API 的「当前连接」：那个返回值里带 SSID，会触发位置访问。
+    这里只问 IP 层「网卡起没起来」，既够用又零成本 —— 监控循环每 10 秒要问一次。
+    """
+    if _iphlp is None:
+        return None
+    flags = (_GAA_FLAG_SKIP_ANYCAST | _GAA_FLAG_SKIP_MULTICAST
+             | _GAA_FLAG_SKIP_DNS_SERVER)
+    size = wt.ULONG(16 * 1024)
+    for _ in range(4):                          # 缓冲区不够就翻倍重试
+        buf = ctypes.create_string_buffer(size.value)
+        rc = _iphlp.GetAdaptersAddresses(
+            AF_UNSPEC, flags, None,
+            ctypes.cast(buf, ctypes.POINTER(IP_ADAPTER_ADDRESSES)),
+            ctypes.byref(size))
+        if rc == _ERROR_BUFFER_OVERFLOW:
+            continue
+        if rc == _ERROR_NO_DATA:
+            return None                         # 一个网卡都没有
+        if rc != 0:
+            return None
+
+        phys, virt = [], []
+        p = ctypes.cast(buf, ctypes.POINTER(IP_ADAPTER_ADDRESSES))
+        n = 0
+        while p and n < 64:
+            n += 1
+            a = p.contents
+            if int(a.IfType) == IF_TYPE_IEEE80211:
+                (virt if _is_virtual_wifi(a) else phys).append(a)
+            p = a.Next
+
+        for group in (phys, virt):
+            if not group:
+                continue
+            ups = [a for a in group if int(a.OperStatus) == IF_OPER_STATUS_UP]
+            if not ups:
+                return "down"
+            # 有起来的：拿到 IP 才算真连上，否则还在获取地址
+            return "up" if any(_has_ipv4(a) for a in ups) else "linking"
+        return None                             # 一个 802.11 网卡都没有
+    return None
+
+
 def current_ssid():
     """
     用原生 WLAN API 取当前连接的 SSID —— **完全不启动任何子进程**。

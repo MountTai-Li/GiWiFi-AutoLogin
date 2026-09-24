@@ -12,6 +12,7 @@ config.json.bak-*
 giwifi.log
 giwifi.log.*
 giwifi.throttle
+giwifi.wifi
 crash.log
 
 # ============================================================
