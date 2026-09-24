@@ -30,7 +30,7 @@ from html.parser import HTMLParser
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import aes128  # noqa: E402
 
-VERSION = "1.12.0"
+VERSION = "1.13.0"
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36")
@@ -532,6 +532,12 @@ DEFAULT_CONFIG = {
     # "never"         ：永远不碰开关（等价于 ensure_wifi_on=false）
     "wifi_radio_policy": "startup",
     "auto_connect_wifi": True,      # 没连上指定 WiFi 时自动连过去
+    # --- 不在校园网里时，要不要主动切回指定 WiFi（v1.13，默认关）---
+    # False（默认）：只在「完全没连上 WiFi」时才自动连接。
+    #                如果连的是别的网络（手机热点 / 家里）并且能上网，就不去打扰。
+    # True         ：只要认证网关不可达（= 不在校园网里）就切回指定 WiFi，
+    #                **哪怕当前已经能上网**（例如你连着手机热点，它会切回宿舍 WiFi）。
+    "switch_to_target_wifi": False,
     # --- 位置信息节流（查当前 SSID / 扫描 WiFi 都会被记成一次位置访问）---
     # 「不限制 WiFi」时程序**完全不查** SSID，这两项只在下面两种情况生效：
     # 0 = **不做周期性检查**（默认）：只有检测到掉线、真的需要判断

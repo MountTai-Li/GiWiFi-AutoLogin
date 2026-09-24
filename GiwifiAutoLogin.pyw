@@ -773,6 +773,18 @@ class App:
             cursor="hand2")
         self.chk_remember.grid(row=2, column=3, sticky="w", padx=(8, 0))
 
+        # 「切回宿舍 WiFi」（v1.13，默认关）：
+        # 连的是别的网络（手机热点 / 家里）但不在校园网里时，要不要切回宿舍 WiFi。
+        # 默认关 = 不去打扰"当前明明能上网"的情况；勾上才切。
+        self.var_switch = tk.IntVar(value=0)
+        self.chk_switch = tk.Checkbutton(
+            g, text="不在校园网里时切回宿舍 WiFi（即使当前能上网）",
+            variable=self.var_switch, command=self._sync_remember_state,
+            bg=BG, fg=FG_DIM, activebackground=BG, activeforeground=FG,
+            selectcolor=CARD, font=("Microsoft YaHei UI", 8), bd=0,
+            highlightthickness=0, cursor="hand2")
+        self.chk_switch.grid(row=5, column=1, columnspan=3, sticky="w", pady=(1, 0))
+
         # 密码明文永不回显；用一个复选框临时切换可见性，方便核对有没有打错
         self.var_showpwd = tk.IntVar(value=0)
         self.chk_show = tk.Checkbutton(
@@ -877,8 +889,9 @@ class App:
         want = (self.cfg.get("wifi_ssid") or "").strip()
         self.cb_wifi.set(want if want else WIFI_ANY)
 
-        # 「记住并自动连接」
+        # 「记住并自动连接」+ 它的下级选项「不在校园网里时切回宿舍 WiFi」
         self.var_remember.set(1 if self.cfg.get("auto_connect_wifi") else 0)
+        self.var_switch.set(1 if self.cfg.get("switch_to_target_wifi") else 0)
         self._sync_remember_state()
 
         # 「开机自启后显示托盘图标」
@@ -891,13 +904,21 @@ class App:
         """
         「记住并自动连接」只有在选中了**具体某个 WiFi** 时才有意义。
         选「不限制」时置灰并取消勾选（否则无从"连哪一个"）。
+
+        「切回宿舍 WiFi」是它的下级选项（没有目标网络就无从切回），一并同步。
         """
         try:
-            if self._wifi_selected_value():
+            on = bool(self._wifi_selected_value())
+            if on:
                 self.chk_remember.configure(state="normal", fg=FG_DIM)
             else:
                 self.var_remember.set(0)
                 self.chk_remember.configure(state="disabled", fg="#59606e")
+            # 下级开关：只有勾了「记住并自动连接」才可用
+            if on and self.var_remember.get():
+                self.chk_switch.configure(state="normal", fg=FG_DIM)
+            else:
+                self.chk_switch.configure(state="disabled", fg="#59606e")
         except Exception:
             pass
 
@@ -1134,6 +1155,8 @@ class App:
         # 「记住并自动连接」：勾上且选定了具体 WiFi 才生效
         remember = bool(self.var_remember.get()) and bool(wifi)
         new_cfg["auto_connect_wifi"] = remember
+        # 「不在校园网里时切回宿舍 WiFi」：下级选项，没有"记住并自动连接"就无从切回
+        new_cfg["switch_to_target_wifi"] = bool(self.var_switch.get()) and remember
         # 「开机自启后显示托盘图标」
         new_cfg["tray_on_autostart"] = bool(self.var_tray_auto.get())
         if remember:

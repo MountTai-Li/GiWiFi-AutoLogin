@@ -653,11 +653,12 @@ class Monitor:
                     if link == "down":
                         # 链路根本没起来 —— 不需要任何额外探测，直接连
                         need, why = True, "（Wi-Fi 已断开）"
-                    else:
-                        # 链路通着，但可能在别的网络上（手机热点 / 家里）。
-                        # 用**认证网关是否可达**判断在不在校园网内 ——
-                        # 它是内网地址，在家/热点上根本不可达，而且零位置访问。
-                        # 这比"每轮查一次 SSID" 更准也更省。
+                    elif self.cfg.get("switch_to_target_wifi"):
+                        # **可选行为**（`switch_to_target_wifi`，默认关）：
+                        # 连的是别的网络（手机热点 / 家里）时也切回宿舍 WiFi。
+                        # 默认关是为了不打扰"当前明明能上网"的情况。
+                        # 判据用**认证网关是否可达** —— 它是内网地址，
+                        # 在家/热点上根本不可达，而且零位置访问。
                         self.portal_ok = giwifi.portal_reachable(self.cfg)
                         if self.portal_ok:
                             self._portal_down = 0
