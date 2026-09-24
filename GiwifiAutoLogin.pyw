@@ -6,7 +6,7 @@ GiwifiAutoLogin.pyw —— GiWiFi 校园网自动登录助手（主程序）
     pythonw GiwifiAutoLogin.pyw              打开控制面板（图形界面）
     pythonw GiwifiAutoLogin.pyw --silent     纯后台监控（开机自启用这个）
                                              是否显示托盘图标由配置项
-                                             tray_on_autostart 决定
+                                             tray_on_autostart / tray_hidden 决定
     python  GiwifiAutoLogin.pyw --once       只跑一次检测+登录，打印结果后退出
     python  GiwifiAutoLogin.pyw --diag       打印环境诊断信息
     python  GiwifiAutoLogin.pyw --test-login 用配置里的账号做一次真实登录测试
@@ -21,6 +21,8 @@ GiwifiAutoLogin.pyw —— GiWiFi 校园网自动登录助手（主程序）
     · 单实例互斥，重复启动不会出现两个进程抢着登录
     · 后台模式可选择挂一个系统托盘图标（右键即可操作），
       且与窗口的托盘图标互斥，任何时候都只有一个图标
+    · 托盘可以**完全隐藏**（界面勾选框或托盘右键菜单任一即可），
+      隐藏后想找回窗口：双击桌面快捷方式 —— 新进程会把已在跑的窗口叫出来
     · 可拦截 Windows 强制门户探测，不再自动弹出浏览器登录页
       （程序自己会静默认证，那个页面纯属多余）
 """
@@ -199,7 +201,68 @@ def request_quit_all():
         pass
 
 
-def _silent_log(msg):
+# --------------------------------------------------------------- 唤出信号
+# 「托盘被隐藏 + 窗口也关了」时，用户就**再没有任何入口**了：双击桌面快捷方式
+# 会撞上界面的单实例检查，只弹一句"已经在运行了"，而任务栏空空如也。
+# 所以重复启动时不再弹框 —— 改为留一个标记文件，让**已经在跑的那个窗口**
+# 自己亮出来（它每秒查一次，见 App._tick）。
+SHOW_FLAG = "giwifi.show"
+
+
+def _show_flag_path():
+    return os.path.join(BASE, SHOW_FLAG)
+
+
+def show_window_requested():
+    try:
+        return os.path.exists(_show_flag_path())
+    except Exception:
+        return False
+
+
+def clear_show_flag():
+    try:
+        p = _show_flag_path()
+        if os.path.exists(p):
+            os.remove(p)
+    except Exception:
+        pass
+
+
+def request_show_window():
+    try:
+        with open(_show_flag_path(), "w", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S"))
+    except Exception:
+        pass
+
+
+def set_config_flag(key, value):
+    """
+    跨进程改 config.json 里的**单个开关**并立即落盘。
+
+    托盘菜单的动作跑在**托盘线程**里，只能做线程安全、不碰界面的事 ——
+    所以这里只做「读 → 改一个键 → 原子写 → 回读校验」。
+    写盘走 giwifi.save_config 的 tmp + fsync + os.replace，不会写出半截 JSON。
+
+    返回 True 表示磁盘上确实变成了期望值（回读确认过，不只是"写过了"）。
+    """
+    for _ in range(3):
+        try:
+            c = giwifi.load_config()
+            if bool(c.get(key)) == bool(value):
+                return True
+            c[key] = bool(value)
+            giwifi.save_config(c)
+            if bool(giwifi.load_config().get(key)) == bool(value):
+                return True
+        except Exception:
+            pass
+        time.sleep(0.15)
+    return False
+
+
+def _silent_log(msg, level="INFO"):
     """
     后台模式（pythonw）**没有控制台，sys.stdout 是 None，print 会被静默丢弃**，
     所以关键信息要显式追加到日志文件，否则出了问题完全查不到。
@@ -208,7 +271,8 @@ def _silent_log(msg):
         cfg = giwifi.load_config()
         p = os.path.join(BASE, cfg.get("log_file") or "giwifi.log")
         with open(p, "a", encoding="utf-8") as f:
-            f.write("%s [INFO] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), msg))
+            f.write("%s [%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"),
+                                      level, msg))
     except Exception:
         pass
 
@@ -280,6 +344,8 @@ def silent_tray(mon, tray_state):
                 ("---", None),
                 (pause_key, pause_label),
                 ("---", None),
+                ("hide", "隐藏托盘"),
+                ("---", None),
                 ("quit", "退出程序")]
 
     def cmd(key):
@@ -296,6 +362,13 @@ def silent_tray(mon, tray_state):
         elif key == "resume":
             mon.resume()
             _silent_log("已恢复监控（从托盘）")
+        elif key == "hide":
+            # 只写盘，图标由主循环按配置撤下（1 秒内生效）——
+            # 托盘线程里不做界面动作，保持简单可控
+            if set_config_flag("tray_hidden", True):
+                _silent_log("已隐藏托盘图标（从托盘菜单）—— 想恢复请打开控制面板取消勾选")
+            else:
+                _silent_log("隐藏托盘失败：配置未能写入", "WARN")
         elif key == "quit":
             _silent_log("从托盘退出程序")
             request_quit_all()
@@ -344,12 +417,57 @@ def run_silent():
                               _silent_log("认证失败已弹窗提示用户"))[0])
     mon.start()
 
-    # 托盘默认不开（保持完全静默）；用户在控制面板里勾选后，开机自启就带着图标起来
-    want_tray = bool(cfg.get("tray_on_autostart"))
-    if want_tray:
-        tray_ref["t"] = silent_tray(mon, tray_state)
-        if tray_ref["t"]:
-            _silent_log("已按设置显示托盘图标（右键：打开窗口 / 立即登录 / 退出）")
+    # ---- 托盘：按配置决定「有没有」，并按需动态建立 / 撤掉 ----
+    # 默认不开（保持完全静默）；用户在控制面板里勾选后，开机自启就带着图标起来。
+    # v1.14 起支持运行中双向切换（勾上 / 取消都是**立即生效**），不必等下次开机。
+    def read_tray_flags():
+        """只读托盘相关的两个开关 —— 独立读文件，不碰 Monitor 持有的 cfg 字典"""
+        try:
+            c = giwifi.load_config()
+            return bool(c.get("tray_on_autostart")), bool(c.get("tray_hidden"))
+        except Exception:
+            return None, None
+
+    def sync_tray():
+        """
+        让托盘状态跟上最新配置（每秒一次，代价就是读一个小 JSON）。
+
+        「有没有图标」由 tray_on_autostart 与 tray_hidden 共同决定：
+            want = tray_on_autostart and not tray_hidden
+        支持 「无 → 有」和「有 → 无」两个方向的切换，所以两个勾选框
+        改完都不用重启程序。
+        """
+        ta, th = read_tray_flags()
+        if ta is None:
+            return                    # 配置正被原子替换（读到的瞬间）→ 下一轮再说
+        want = ta and not th
+        t = tray_ref["t"]
+
+        if want and not t:
+            tray_ref["t"] = silent_tray(mon, tray_state)
+            if tray_ref["t"]:
+                _silent_log("已按设置显示托盘图标"
+                            "（右键：打开窗口 / 立即登录 / 隐藏托盘 / 退出）")
+            return
+
+        if not want and t:
+            t.stop()
+            tray_ref["t"] = None
+            _silent_log("已按设置隐藏托盘图标（tray_hidden=true）" if th
+                        else "已按设置关闭托盘图标（tray_on_autostart=false）")
+            return
+
+        if want and t and t.available:
+            # 控制面板自己也带托盘图标，两份同时挂着会出现两个一样的图标：
+            # 窗口在的时候先把自己这份撤掉，窗口关掉后再放回来。
+            want_visible = not gui_running()
+            if t.visible != want_visible and t.set_visible(want_visible):
+                t.update_tooltip("%s · %s" % (APP_TITLE, tray_state["text"]))
+                _silent_log("控制面板已%s，后台托盘图标已%s"
+                            % ("打开" if not want_visible else "关闭",
+                               "隐藏" if not want_visible else "恢复"))
+
+    sync_tray()
     print("GiWiFi 自动登录已在后台运行（Ctrl+C 退出）")
     try:
         while True:
@@ -358,16 +476,7 @@ def run_silent():
                 clear_quit_flag()
                 _silent_log("收到控制面板发来的退出请求，正在退出")
                 break
-            # 控制面板自己也带托盘图标，两份同时挂着会出现两个一样的图标：
-            # 窗口在的时候先把自己这份撤掉，窗口关掉后再放回来。
-            t = tray_ref["t"]
-            if want_tray and t and t.available:
-                want_visible = not gui_running()
-                if t.visible != want_visible and t.set_visible(want_visible):
-                    t.update_tooltip("%s · %s" % (APP_TITLE, tray_state["text"]))
-                    _silent_log("控制面板已%s，后台托盘图标已%s"
-                                % ("打开" if not want_visible else "关闭",
-                                   "隐藏" if not want_visible else "恢复"))
+            sync_tray()
     except KeyboardInterrupt:
         print("\n已退出。")
     finally:
@@ -496,6 +605,8 @@ def run_diag():
     print("开机自启       :", "已开启" if autostart.is_enabled() else "未开启")
     print("自启显示托盘   :", "开启（开机后托盘区有图标，可右键操作）"
           if cfg.get("tray_on_autostart") else "关闭（开机后完全静默）")
+    print("隐藏托盘图标   :", "是（控制面板和后台实例都不显示图标）"
+          if cfg.get("tray_hidden") else "否（按上面的设置显示）")
     print("控制面板在运行 :", "是" if gui_running() else "否")
     try:
         import portal_guard
@@ -560,13 +671,11 @@ def run_gui():
 
     # 界面本身也做单实例（后台 --silent 实例不受影响，两者靠文件锁限频共存）
     if not acquire_single_instance("GiwifiAutoLogin.Gui"):
-        try:
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(
-                0, "GiWiFi 自动登录助手已经在运行了，请到任务栏查看。",
-                APP_TITLE, 0x40)
-        except Exception:
-            pass
+        # 已经有一个窗口在跑了 —— **刻意不弹**「已经在运行了，请到任务栏查看」：
+        # 用户很可能正是因为「托盘隐藏了 + 窗口关了」才重新双击图标找回入口的，
+        # 这时弹框只会让他以为出错（而任务栏里其实什么都没有）。
+        # 正确做法是留个标记，让那个窗口自己亮出来（App._tick 每秒查一次）。
+        request_show_window()
         return 0
 
     import tkinter as tk
@@ -618,6 +727,8 @@ class App:
 
         # 系统托盘：关掉窗口之后靠它继续常驻
         self.tray = self._setup_tray()
+        # 配置里要求隐藏托盘的话，在这里统一撤下（此刻 self.tray 已就位）
+        self._apply_tray_visibility()
 
         self.root.after(120, self._drain)
         self.root.after(1000, self._tick)
@@ -830,6 +941,18 @@ class App:
             highlightthickness=0, cursor="hand2", anchor="w")
         self.chk_tray_auto.grid(row=2, column=0, columnspan=3, sticky="w")
 
+        # 「隐藏托盘图标」：勾上 = 托盘区一个图标都不留（本窗口和开机自启的
+        # 后台实例都遵守，优先级高于上面那个开关）。托盘右键菜单里也有同一项，
+        # 点一下就等于勾上它 —— 两边共用 tray_hidden 这一个配置。
+        self.var_tray_hidden = tk.IntVar(value=0)
+        self.chk_tray_hidden = tk.Checkbutton(
+            btns, text="隐藏托盘图标（一个都不留，想恢复就取消勾选）",
+            variable=self.var_tray_hidden, command=self.on_toggle_tray_hidden,
+            bg=BG, fg=FG_DIM, activebackground=BG, activeforeground=FG,
+            selectcolor=CARD, font=("Microsoft YaHei UI", 8), bd=0,
+            highlightthickness=0, cursor="hand2", anchor="w")
+        self.chk_tray_hidden.grid(row=3, column=0, columnspan=3, sticky="w")
+
         # 「拦截连接 WiFi 时自动弹出的浏览器登录页」：改的是系统注册表（HKLM），
         # 需要管理员权限 —— 勾选时会弹一次 UAC 授权框。
         self.var_portal_guard = tk.IntVar(value=0)
@@ -839,13 +962,13 @@ class App:
             bg=BG, fg=FG_DIM, activebackground=BG, activeforeground=FG,
             selectcolor=CARD, font=("Microsoft YaHei UI", 8), bd=0,
             highlightthickness=0, cursor="hand2", anchor="w")
-        self.chk_portal_guard.grid(row=3, column=0, columnspan=3, sticky="w")
+        self.chk_portal_guard.grid(row=4, column=0, columnspan=3, sticky="w")
 
         # 保存结果就地提示（不弹窗打扰）：让「已落盘、重启也在」这件事看得见
         self.lb_save_hint = tk.Label(
             btns, text="配置改动会立即写入本机，关机重启后依然生效",
             bg=BG, fg=FG_DIM, anchor="w", font=("Microsoft YaHei UI", 8))
-        self.lb_save_hint.grid(row=4, column=0, columnspan=3, sticky="w",
+        self.lb_save_hint.grid(row=5, column=0, columnspan=3, sticky="w",
                                pady=(2, 0))
 
         # --- 日志
@@ -896,6 +1019,8 @@ class App:
 
         # 「开机自启后显示托盘图标」
         self.var_tray_auto.set(1 if self.cfg.get("tray_on_autostart") else 0)
+        # 「隐藏托盘图标」
+        self.var_tray_hidden.set(1 if self.cfg.get("tray_hidden") else 0)
 
         # 「拦截连接 WiFi 时自动弹出的浏览器登录页」——状态以注册表为准
         self._refresh_portal_guard()
@@ -1100,6 +1225,12 @@ class App:
         直接把 Tk 主循环卡死 —— 表现就是窗口像卡住、字打不进去）。
         所有探测都在 monitor 后台线程里做，这里只读现成的快照。
         """
+        # 又启动了一次本程序（双击桌面图标）→ 说明用户想看到窗口。
+        # 这同时是「托盘被隐藏 + 窗口也关了」之后**唯一**的找回路径，必须有。
+        if show_window_requested():
+            clear_show_flag()
+            self.show_window()
+
         m = self.mon
         self.info_labels["ssid"].configure(text=m.current_ssid or "(未连接)")
 
@@ -1159,6 +1290,8 @@ class App:
         new_cfg["switch_to_target_wifi"] = bool(self.var_switch.get()) and remember
         # 「开机自启后显示托盘图标」
         new_cfg["tray_on_autostart"] = bool(self.var_tray_auto.get())
+        # 「隐藏托盘图标」
+        new_cfg["tray_hidden"] = bool(self.var_tray_hidden.get())
         if remember:
             # 自动连接需要本机已保存的无线配置文件；没有就提前告诉用户
             prof = (new_cfg.get("wifi_profile") or "").strip() or giwifi.find_profile_for(wifi)
@@ -1199,6 +1332,8 @@ class App:
         self._toggle_pwd_show()
         self._refresh_pwd_state()
         self._sync_remember_state()
+        # 全量保存后让托盘可见性与配置保持一致（勾选框本身已经是即时生效的）
+        self._apply_tray_visibility()
 
         wifi = self.cfg.get("wifi_ssid") or ""
         if not wifi:
@@ -1385,9 +1520,51 @@ class App:
         except Exception as e:
             self._append_log("WARN", "托盘初始化异常：%s" % e)
             return None
+        if self.cfg.get("tray_hidden"):
+            # 配置要求隐藏 → 由 __init__ 在拿到实例后统一撤下（这里只记日志）
+            self._append_log("dim", "托盘图标已按设置隐藏 —— 想恢复："
+                                    "取消勾选「隐藏托盘图标」")
+            return t
         self._append_log("dim", "已加入系统托盘：点 × 只隐藏窗口，"
                                 "双击托盘图标可重新打开")
         return t
+
+    def _apply_tray_visibility(self):
+        """
+        按配置把**本进程**的托盘图标显示 / 隐藏到位（幂等，随便调）。
+
+        后台实例那边由它自己的 sync_tray() 每秒跟随同一个配置项，
+        所以两边不需要额外通信 —— config.json 就是唯一真相。
+        """
+        if not (self.tray and self.tray.available):
+            return
+        want = not bool(self.cfg.get("tray_hidden"))
+        if self.tray.visible != want:
+            self.tray.set_visible(want)
+
+    def on_toggle_tray_hidden(self):
+        """
+        「隐藏托盘图标」—— 勾选 / 取消**立即写盘并立即生效**（不用点「保存并应用」）。
+
+        勾上：本窗口的图标撤掉；后台实例 1 秒内读到配置也跟着撤。
+        取消：图标放回来。注意它管的是「显示不显示」，
+              而上面那个「开机自启后显示托盘图标」管的是「有没有」。
+        """
+        val = bool(self.var_tray_hidden.get())
+        try:
+            self.cfg["tray_hidden"] = val
+            giwifi.save_config(self.cfg)
+        except Exception as e:
+            self._append_log("ERROR", "保存托盘设置失败: %s" % e)
+            return
+        self._apply_tray_visibility()
+        if val:
+            self._append_log("OK", "托盘图标已隐藏（开机自启的后台实例也会跟着隐藏）"
+                                   " —— 想恢复就取消这个勾选；窗口关了的话，"
+                                   "双击桌面上本程序的图标即可重新打开窗口")
+        else:
+            self._append_log("OK", "托盘图标已恢复显示")
+        self._flash_saved()
 
     def _tray_menu(self):
         """托盘右键菜单（每次弹出时动态生成，所以文字能反映当前状态）"""
@@ -1400,6 +1577,8 @@ class App:
             ("login", "立即登录"),
             ("---", None),
             (pause_key, pause_label),
+            ("---", None),
+            ("hide", "隐藏托盘"),
             ("---", None),
             ("quit", "退出程序"),
         ]
@@ -1422,6 +1601,11 @@ class App:
             self.mon.resume()
             self.btn_pause.configure(text="暂停监控")
             self._append_log("dim", "已恢复监控（从托盘）")
+        elif key == "hide":
+            # 与界面上的勾选框共用同一个配置项 —— 点这里等于把那个勾打上，
+            # 勾选框状态同步过去，用户下次打开窗口能看到真实状态
+            self.var_tray_hidden.set(1)
+            self.on_toggle_tray_hidden()
         elif key == "quit":
             self._append_log("dim", "从托盘退出程序…")
             self.on_quit()
@@ -1462,15 +1646,21 @@ class App:
             self.mon.display_ssid = False
         except Exception:
             pass
-        self._append_log("dim", "窗口已隐藏，程序继续在系统托盘运行"
-                                "（双击托盘图标可重新打开）。")
-        if self.tray and self.tray.available:
+        tray_on = bool(self.tray and self.tray.available and self.tray.visible)
+        if tray_on:
+            self._append_log("dim", "窗口已隐藏，程序继续在系统托盘运行"
+                                    "（双击托盘图标可重新打开）。")
             self.tray.update_tooltip(self._tray_tip())
             if first:
                 # 第一次隐藏弹个气泡，免得用户以为程序被关掉了
                 self.tray.notify("GiWiFi 自动登录助手",
                                  "已最小化到托盘，仍在后台保持网络在线。\n"
                                  "双击托盘图标可重新打开窗口。")
+        else:
+            # 托盘图标被隐藏了 —— 这时再说"在托盘里运行"就是误导
+            self._append_log("dim", "窗口已隐藏，程序继续在后台运行"
+                                    "（托盘图标已隐藏；双击桌面上本程序的图标"
+                                    "可重新打开窗口）。")
 
     def show_window(self):
         self._hidden = False

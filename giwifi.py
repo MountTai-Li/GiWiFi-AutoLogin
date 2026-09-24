@@ -30,7 +30,7 @@ from html.parser import HTMLParser
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import aes128  # noqa: E402
 
-VERSION = "1.13.0"
+VERSION = "1.14.0"
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36")
@@ -552,6 +552,13 @@ DEFAULT_CONFIG = {
     #                立即登录 / 暂停监控 / 退出程序」，双击可打开窗口。
     # 注意：打开控制面板后托盘图标由窗口接管，不会出现两个图标。
     "tray_on_autostart": False,
+    # --- 完全隐藏托盘图标（v1.14，默认 False）---
+    # True = 托盘区一个图标都不留（控制面板和后台实例都遵守），
+    #        适合「我只想让它安安静静在后台跑，别在我托盘里占位」的人。
+    # 优先级高于 tray_on_autostart —— 它为真时，那个开关就失效了。
+    # ⚠ 隐藏后想恢复：重新打开控制面板（双击桌面快捷方式即可，
+    #    程序会把已在运行的窗口叫出来），取消勾选「隐藏托盘图标」。
+    "tray_hidden": False,
     "log_file": "giwifi.log",
     "probe_urls": [
         "http://connect.rom.miui.com/generate_204",
