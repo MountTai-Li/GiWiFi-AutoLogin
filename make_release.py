@@ -31,8 +31,8 @@ EXE_NAME = "GiwifiAutoLogin"
 # 发布包里要带的源码文件（放「源码-备用」目录，exe 被安全软件拦住时可用）
 SRC_FILES = ["GiwifiAutoLogin.pyw", "giwifi.py", "aes128.py", "monitor.py",
              "secure_store.py", "winutil.py", "wlanapi.py", "tray.py", "autostart.py",
-             "make_icon.py", "make_release.py", "giwifi.ico", "启动.bat",
-             "打包exe.bat", "README.md", "使用说明.txt"]
+             "portal_guard.py", "make_icon.py", "make_release.py", "giwifi.ico",
+             "启动.bat", "打包exe.bat", "README.md", "使用说明.txt"]
 VENDOR_FILES = ["pylnk3.py", "pylnk3-LICENSE.txt"]
 
 

@@ -10,6 +10,9 @@ GiwifiAutoLogin.pyw —— GiWiFi 校园网自动登录助手（主程序）
     python  GiwifiAutoLogin.pyw --once       只跑一次检测+登录，打印结果后退出
     python  GiwifiAutoLogin.pyw --diag       打印环境诊断信息
     python  GiwifiAutoLogin.pyw --test-login 用配置里的账号做一次真实登录测试
+    python  GiwifiAutoLogin.pyw --portal-guard on|off|status
+                                             拦截/恢复「连接 WiFi 时自动弹出的
+                                             浏览器登录页」（需管理员权限）
 
 特性：
     · 后台常驻监测，外网不通时自动完成 GiWiFi 门户认证
@@ -18,6 +21,8 @@ GiwifiAutoLogin.pyw —— GiWiFi 校园网自动登录助手（主程序）
     · 单实例互斥，重复启动不会出现两个进程抢着登录
     · 后台模式可选择挂一个系统托盘图标（右键即可操作），
       且与窗口的托盘图标互斥，任何时候都只有一个图标
+    · 可拦截 Windows 强制门户探测，不再自动弹出浏览器登录页
+      （程序自己会静默认证，那个页面纯属多余）
 """
 import os
 import queue
@@ -377,6 +382,45 @@ def run_silent():
     return 0
 
 
+def run_portal_guard(action):
+    """
+    --portal-guard on|off|status —— 「拦截连接 WiFi 时自动弹出的浏览器登录页」
+
+    背后改的是 HKLM 注册表（系统级），**需要管理员权限**：
+    界面里勾选时会自动提权、再用本参数重进一次；
+    提权后的进程没有控制台，所以结果用原生消息框展示。
+    """
+    import portal_guard
+    headless = sys.stdout is None            # pythonw / 打包后的 exe
+    if not headless:
+        sys.stdout.reconfigure(encoding="utf-8")
+    action = (action or "status").lower()
+
+    if action == "status":
+        st = portal_guard.probe_state()
+        text = ("拦截浏览器登录页 : %s\n"
+                "NoActiveProbe       = %s\n"
+                "EnableActiveProbing = %s\n"
+                "管理员权限          : %s" % (
+                    portal_guard.describe(), st["policy"], st["nla"],
+                    "有" if st["admin"] else "无"))
+        print(text)
+        if headless:
+            winutil.message_box("GiWiFi 自动登录助手 · 拦截状态", text)
+        return 0
+
+    ok, msg = portal_guard.set_blocked(action == "on")
+    if not headless:
+        print(("[OK] " if ok else "[失败] ") + msg)
+    if headless or not ok:
+        flags = (winutil.MB_OK | winutil.MB_TOPMOST
+                 | winutil.MB_SETFOREGROUND
+                 | (winutil.MB_ICONINFORMATION if ok
+                    else winutil.MB_ICONWARNING))
+        winutil.message_box("GiWiFi 自动登录助手", msg, flags)
+    return 0 if ok else 1
+
+
 def run_once():
     sys.stdout.reconfigure(encoding="utf-8")
     cfg = giwifi.load_config()
@@ -440,6 +484,14 @@ def run_diag():
     print("自启显示托盘   :", "开启（开机后托盘区有图标，可右键操作）"
           if cfg.get("tray_on_autostart") else "关闭（开机后完全静默）")
     print("控制面板在运行 :", "是" if gui_running() else "否")
+    try:
+        import portal_guard
+        st = portal_guard.probe_state()
+        print("拦截登录弹窗   :", portal_guard.describe())
+        print("    NoActiveProbe=%s / EnableActiveProbing=%s / 管理员=%s"
+              % (st["policy"], st["nla"], "是" if st["admin"] else "否"))
+    except Exception as e:
+        print("拦截登录弹窗   : 查询失败", type(e).__name__, e)
     print("桌面目录       :", autostart.desktop_dir())
     print()
     print("-- 位置信息相关 --")
@@ -750,11 +802,22 @@ class App:
             highlightthickness=0, cursor="hand2", anchor="w")
         self.chk_tray_auto.grid(row=2, column=0, columnspan=3, sticky="w")
 
+        # 「拦截连接 WiFi 时自动弹出的浏览器登录页」：改的是系统注册表（HKLM），
+        # 需要管理员权限 —— 勾选时会弹一次 UAC 授权框。
+        self.var_portal_guard = tk.IntVar(value=0)
+        self.chk_portal_guard = tk.Checkbutton(
+            btns, text="拦截连接 WiFi 时自动弹出的浏览器登录页（需管理员权限）",
+            variable=self.var_portal_guard, command=self.on_toggle_portal_guard,
+            bg=BG, fg=FG_DIM, activebackground=BG, activeforeground=FG,
+            selectcolor=CARD, font=("Microsoft YaHei UI", 8), bd=0,
+            highlightthickness=0, cursor="hand2", anchor="w")
+        self.chk_portal_guard.grid(row=3, column=0, columnspan=3, sticky="w")
+
         # 保存结果就地提示（不弹窗打扰）：让「已落盘、重启也在」这件事看得见
         self.lb_save_hint = tk.Label(
             btns, text="配置改动会立即写入本机，关机重启后依然生效",
             bg=BG, fg=FG_DIM, anchor="w", font=("Microsoft YaHei UI", 8))
-        self.lb_save_hint.grid(row=3, column=0, columnspan=3, sticky="w",
+        self.lb_save_hint.grid(row=4, column=0, columnspan=3, sticky="w",
                                pady=(2, 0))
 
         # --- 日志
@@ -804,6 +867,9 @@ class App:
 
         # 「开机自启后显示托盘图标」
         self.var_tray_auto.set(1 if self.cfg.get("tray_on_autostart") else 0)
+
+        # 「拦截连接 WiFi 时自动弹出的浏览器登录页」——状态以注册表为准
+        self._refresh_portal_guard()
 
     def _sync_remember_state(self):
         """
@@ -969,6 +1035,8 @@ class App:
                 elif item[0] == "tray":
                     # 托盘菜单是在别的线程触发的，统一回到主线程执行
                     self._handle_tray_command(item[1])
+                elif item[0] == "portalguard":
+                    self._on_portal_guard_result(item[1])
                 elif item[0] == "alert":
                     self._show_alert(item[1])
         except queue.Empty:
@@ -1163,6 +1231,78 @@ class App:
                                    "开机后完全静默，托盘区不留图标")
         self._flash_saved()
 
+    # ------------------------------------------------- 拦截浏览器登录弹窗
+    def _refresh_portal_guard(self):
+        """勾选框状态以**系统注册表**为准（没有对应的 config 项）"""
+        try:
+            import portal_guard
+            self.var_portal_guard.set(1 if portal_guard.is_blocked() else 0)
+        except Exception as e:
+            self._append_log("dim", "查询拦截状态失败：%s" % e)
+
+    def on_toggle_portal_guard(self):
+        """
+        「拦截连接 WiFi 时自动弹出的浏览器登录页」。
+
+        改的是系统注册表（HKLM），**需要管理员权限**：
+        普通权限下会弹一次 UAC 授权框，由提权后的新进程完成写入。
+        等用户点授权要花几秒，所以放后台线程做，别把界面卡住。
+        """
+        import portal_guard
+        want = bool(self.var_portal_guard.get())
+        action = "on" if want else "off"
+
+        ok, msg = portal_guard.set_blocked(want)
+        if ok:
+            self._append_log("OK", msg.replace("\n", " "))
+            self._hint_portal_guard()
+            return
+        if portal_guard.NEED_ADMIN_MSG not in msg:
+            self._append_log("ERROR", "设置失败：%s" % msg)
+            self._refresh_portal_guard()
+            return
+
+        # 权限不够 → 提权重来（弹 UAC），结果稍后回读注册表确认
+        self._append_log("WARN", "改系统设置需要管理员权限，正在申请授权"
+                                 "（请在弹窗里点『是』）…")
+
+        def work():
+            started = portal_guard.relaunch_elevated(["--portal-guard", action])
+            self.q.put(("portalguard", "started" if started else "denied", None))
+
+        threading.Thread(target=work, name="pg-elevate", daemon=True).start()
+
+    def _on_portal_guard_result(self, kind):
+        if kind == "denied":
+            self._append_log("WARN", "没拿到管理员授权，设置未改动")
+            self._refresh_portal_guard()
+            return
+        self._append_log("dim", "已发起提权操作，等待写入结果…")
+        # 要等用户点授权 + 写注册表，稍后再回读真实状态
+        self.root.after(2500, self._after_portal_guard)
+
+    def _after_portal_guard(self):
+        try:
+            import portal_guard
+            blocked = portal_guard.is_blocked()
+        except Exception:
+            blocked = False
+        self.var_portal_guard.set(1 if blocked else 0)
+        if blocked:
+            self._append_log("OK", "已拦截：连接 WiFi 时不再自动弹出浏览器登录页"
+                                   "（重连网络或重启后完全生效）")
+            self._hint_portal_guard()
+        else:
+            self._append_log("WARN", "没有生效 —— 可能没点『是』，或被系统策略拦下")
+
+    def _hint_portal_guard(self):
+        """就地提示：改的是注册表，不是 config.json，别说错"""
+        try:
+            self.lb_save_hint.configure(
+                text="✓ 已写入系统设置（注册表）· 重连网络或重启后生效", fg=GREEN)
+        except Exception:
+            pass
+
     def _refresh_autostart_btn(self):
         import autostart
         on = autostart.is_enabled()
@@ -1344,12 +1484,17 @@ def _crash_log(exc_text):
 
 def main():
     args = [a.lower() for a in sys.argv[1:]]
-    # 常量模式（--once / --diag / --test-login）是一次性命令，输出要打到当前控制台，
-    # 走 detached 重启会把输出丢掉，所以这些模式跳过低内存重启。
-    one_shot = any(a in args for a in ("--once", "--diag", "--test-login"))
+    # 常量模式（--once / --diag / --test-login / --portal-guard）是一次性命令，
+    # 输出要打到当前控制台，走 detached 重启会把输出丢掉，所以跳过低内存重启。
+    one_shot = any(a in args for a in ("--once", "--diag", "--test-login",
+                                       "--portal-guard"))
     if not one_shot and ensure_low_memory():
         return 0
     try:
+        if "--portal-guard" in args:
+            i = args.index("--portal-guard")
+            act = sys.argv[i + 2] if len(sys.argv) > i + 2 else "status"
+            return run_portal_guard(act)
         if "--silent" in args or "-s" in args:
             return run_silent()
         if "--once" in args:

@@ -72,6 +72,7 @@ def decode_output(raw, encoding=None, errors="replace"):
 # --------------------------------------------------------------- 原生消息框
 MB_OK = 0x00000000
 MB_ICONWARNING = 0x00000030
+MB_ICONINFORMATION = 0x00000040
 MB_TOPMOST = 0x00040000
 MB_SETFOREGROUND = 0x00010000
 
