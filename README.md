@@ -6,8 +6,10 @@
 
 **当前版本：v1.14.0**（零第三方依赖 · 常驻约 24 MB · 联网稳态不访问位置信息）
 
-📦 **下载即用**：到 [Releases 页面](https://github.com/MountTai-Li/GiWiFi-AutoLogin/releases)
-下载**安装程序**（一个 exe），双击安装即可 —— 无需 Python、无需手动配置。
+📦 **下载即用**：直接下载**安装程序**（一个 exe，双击安装即可 —— 无需 Python）：
+
+- 仓库内：[`安装包/GiWiFi自动登录助手-安装程序-v1.14.0.exe`](安装包/GiWiFi自动登录助手-安装程序-v1.14.0.exe)
+- 或 [Releases 页面](https://github.com/MountTai-Li/GiWiFi-AutoLogin/releases)
 
 > ⚠️ **使用范围**：本项目用于**自动化你本人校园网账号的登录流程**，属于个人效率工具。
 > 请仅在你本人有权使用的账号与网络上运行，并遵守所在学校的网络管理规定。
