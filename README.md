@@ -2,9 +2,12 @@
 
 > 连上宿舍 WiFi 后自动完成 GiWiFi 门户认证；掉线自动重登；开机静默启动（托盘图标可选，也**可完全隐藏**）；**可拦掉 Windows 自动弹出的浏览器登录页**，全程无需手动打开登录网页。
 
-适用环境：Windows 10 / 11 · 认证网关 `http://192.168.100.3/gportal/`（GiWiFi `gportal` 门户）
+适用环境：Windows 10 / 11 · 校园网 GiWiFi `gportal` 认证门户（网关为学校内网地址，见第七节配置说明）
 
 **当前版本：v1.14.0**（零第三方依赖 · 常驻约 24 MB · 联网稳态不访问位置信息）
+
+📦 **下载即用**：到 [Releases 页面](https://github.com/MountTai-Li/GiWiFi-AutoLogin/releases)
+下载**安装程序**（一个 exe），双击安装即可 —— 无需 Python、无需手动配置。
 
 > ⚠️ **使用范围**：本项目用于**自动化你本人校园网账号的登录流程**，属于个人效率工具。
 > 请仅在你本人有权使用的账号与网络上运行，并遵守所在学校的网络管理规定。
@@ -14,14 +17,24 @@
 
 ## 一、它解决什么问题
 
-原始流程：开电脑 → 连宿舍 WiFi → 打开浏览器 → 输入 `http://192.168.100.3/gportal/web/logout?sign=...` → 手动输账号密码 → 才能上网。
+原始流程：开电脑 → 连宿舍 WiFi → 打开浏览器 → 进入校园网登录页面 → 手动输账号密码 → 才能上网。
 每次重连、每次凌晨被踢下线，都要重复一遍。
 
 本程序把这一串操作变成：**开机即联网，掉线自动恢复，你什么都不用做。**
 
 ---
 
-## 二、快速开始（4 步）
+## 二、快速开始（安装 + 4 步）
+
+**第 0 步 · 安装**：在 [Releases 页面](https://github.com/MountTai-Li/GiWiFi-AutoLogin/releases)
+下载 **`GiWiFi自动登录助手-安装程序.exe`**，双击 → 按提示完成安装。安装程序会：
+
+- 默认装到 `%LOCALAPPDATA%\Programs\GiWiFi自动登录助手`（**无需管理员权限**）
+- 自动创建桌面 + 开始菜单快捷方式，默认勾选「开机自动运行」（可随时在程序里关掉）
+- 卸载：开始菜单里的「卸载」，或 系统设置 → 应用 里卸载
+
+> 不想用安装程序？也可以用「绿色版」：解压发布包，双击文件夹里的 `GiwifiAutoLogin.exe`
+> （**别把 exe 单独拖出来**，配置文件要和它放在一起）。
 
 1. **双击桌面「GiWiFi自动登录」图标**（安装时已自动创建，开始菜单里也有）。
    全程**不会出现任何命令窗口**。
@@ -88,7 +101,21 @@ WiFi 认证不会中断。双击托盘图标即可重新打开窗口；右键托
 
 ## 二·五、更新记录
 
-### v1.14（本次）—— 托盘图标可以完全隐藏
+### v1.14 后续（2026-10-06）—— 新增图形化安装程序
+
+新增**单文件安装程序**（`GiWiFi自动登录助手-安装程序-v1.14.0.exe`）：
+
+- 双击 → 选安装位置（默认 `%LOCALAPPDATA%\Programs\GiWiFi自动登录助手`）→ 完成；
+  **用户级安装、不需要管理员权限**
+- 自动创建桌面 / 开始菜单快捷方式；「开机自动运行」默认勾选（可在程序里随时关）
+- 卸载走标准流程（开始菜单 / 系统设置→应用）；重装、升级**不会丢账号配置**
+  （安装器不写 `config.json`，账号配置只在主程序里保存）
+- 发布包（zip）里同时保留「绿色版」，两种方式二选一
+
+另外：构建脚本（`make_release.py` / `make_installer.py`）新增 **tkinter 前置检查** ——
+缺少 GUI 模块的解释器会被直接拒绝，防止再打出「界面打不开」的 exe。
+
+### v1.14 —— 托盘图标可以完全隐藏
 
 **用户反馈**
 > 增加一个隐藏托盘的选项，勾选后不显示托盘；托盘右键也加一个「隐藏托盘」。
@@ -173,7 +200,7 @@ WiFi 认证不会中断。双击托盘图标即可重新打开窗口；右键托
 |------|--------|-------------------|
 | Wi-Fi 开关是开是关 | `WlanQueryInterface(radio_state)` | 否 |
 | 链路连上没有 | `GetAdaptersAddresses`（看 IEEE802.11 网卡的 OperStatus / 有无 IPv4） | **否** |
-| 在不在校园网里 | 认证网关 `192.168.100.3` 是否可达（纯 TCP） | **否** |
+| 在不在校园网里 | 认证网关是否可达（纯 TCP） | **否** |
 | 到底连的是哪个网络 | `WlanQueryInterface(current_connection)` | 是（只在确认连接结果时查一次） |
 
 > 妙处在于**认证网关是内网地址**：在家、在手机热点上根本不可达。
@@ -569,10 +596,12 @@ http://www.msftconnecttest.com/connecttest.txt     期望正文正好是 "Micros
 
 GiWiFi 的 `gportal` 门户不是普通的「表单 POST」，密码是**先整体 AES 加密再提交**的。完整流程如下。
 
+> 下文示例中网关统一写作 `192.168.100.x`（各校部署的地址不同，以你自己网络的为准）。
+
 ### 1. 取登录页，拿隐藏字段
 
 ```
-GET http://192.168.100.3/gportal/web/login?has_reload=1
+GET http://192.168.100.x/gportal/web/login?has_reload=1
 ```
 
 返回的 HTML 里有一个 `<form id="frmLogin">`，包含 12 个字段。程序按 **DOM 顺序**解析（顺序要和 `jQuery.serialize()` 一致）：
@@ -617,11 +646,11 @@ $.ajax({
 ### 3. 提交认证
 
 ```
-POST http://192.168.100.3/gportal/web/authLogin?round=<0~1000>
+POST http://192.168.100.x/gportal/web/authLogin?round=<0~1000>
 Content-Type: application/x-www-form-urlencoded; charset=UTF-8
 X-Requested-With: XMLHttpRequest
-Origin: http://192.168.100.3
-Referer: http://192.168.100.3/gportal/web/login?has_reload=1
+Origin: http://192.168.100.x
+Referer: http://192.168.100.x/gportal/web/login?has_reload=1
 Cookie: PHPSESSID=...
 
 data=<Base64 密文>&iv=<iv>
@@ -743,7 +772,7 @@ python aes128.py
 {
   "username": "13800138000",         // 校园网账号（手机号），界面保存时写入
   "password_enc": "<DPAPI 密文，保存时自动生成>",   // 不要手动改
-  "portal": "http://192.168.100.3",  // 认证网关
+  "portal": "http://192.168.100.x",  // 认证网关（各校不同，填你自己的门户内网地址）
   "login_path": "/gportal/web/login",
   "auth_path": "/gportal/web/authLogin",
   "check_interval": 10,              // 在线时的检测间隔（秒）
@@ -858,6 +887,11 @@ python aes128.py
 
 ## 八、打包成 exe / 分发给别人
 
+> ⚠️ **构建环境要求**：打包 GUI 版必须使用**带 tkinter 的完整版 Python**
+> （如 Python Install Manager 的 `pythoncore` / 官网安装版）。
+> 缺少 tkinter 的解释器会打出「界面打不开」的 exe（2026-10-06 踩到），
+> 因此 `make_release.py` / `make_installer.py` 都加了前置检查：缺 GUI 模块直接拒绝构建。
+
 ### 已验证可用的构建命令
 
 ```bat
@@ -890,9 +924,19 @@ python -m PyInstaller --noconfirm --clean --onefile --noconsole ^
 python make_release.py
 ```
 
-它会自动完成：PyInstaller 构建 → 组装分发包目录 → **用真实的账号与密码密文做全文比对**
+它会自动完成：PyInstaller 构建主程序 → **构建安装程序**（`make_installer.py`，内嵌主程序）→
+组装分发包目录 → **用真实的账号与密码密文做全文比对**
 （确保包内 `config.json` 的凭据字段为空、日志和 `.bak` 不被打进包）→ 压缩成
 `GiWiFi自动登录助手-v<版本>.zip` 放到桌面。
+
+只需要单独重新构建安装程序（不走完整出包流程）：
+
+```bat
+python make_installer.py
+```
+
+产物 `release\installer\GiWiFi自动登录助手-安装程序-v<版本>.exe`
+（约 24 MB：内嵌主程序与 tkinter 运行时，单文件、双击即装）。
 
 > **为什么文件名带版本号、而且是"原子替换"而不是"先删再建"**（v1.13.0 起）：
 > 桌面图标的位置记录存在注册表 `Bags` 里、**以文件名为键**。如果一直用同一个名字
@@ -904,12 +948,13 @@ python make_release.py
 
 ```
 GiWiFi自动登录助手/
-├── GiwifiAutoLogin.exe     主程序，双击即用
+├── GiWiFi自动登录助手-安装程序-v<版本>.exe   安装程序（推荐：双击安装）
+├── GiwifiAutoLogin.exe     主程序（绿色版，双击即用）
 ├── config.json             干净模板（账号/密码为空）
 ├── giwifi.ico
 ├── 使用说明.txt             给使用者的说明
 ├── README.md               完整技术文档
-└── 源码-备用/               源代码（exe 被安全软件拦住时的替代方案）
+└── 源码-备用/               源代码（含 installer.py / make_installer.py）
 ```
 
 打包时务必确认：**包内 `config.json` 的 `username` 与 `password_enc` 都是空的**，
@@ -924,7 +969,7 @@ GiWiFi自动登录助手/
 ## 九、常见问题
 
 **Q：状态一直是「门户不可达」？**
-说明连不上 `192.168.100.3`，通常是没连上校园 WiFi。检查 `config.json` 里的 `portal` 地址是否正确。
+说明连不上校园网关，通常是没连上校园 WiFi。检查 `config.json` 里的 `portal` 地址是否正确。
 
 **Q：状态是「登录失败：账号或密码错误」？**
 先在浏览器里手动登录一次确认账号密码。若浏览器能登而程序不能，跑 `python GiwifiAutoLogin.pyw --diag` 看能否正确解析出 `sign` / `iv`（门户改版会导致字段变化）。

@@ -31,7 +31,8 @@ EXE_NAME = "GiwifiAutoLogin"
 # 发布包里要带的源码文件（放「源码-备用」目录，exe 被安全软件拦住时可用）
 SRC_FILES = ["GiwifiAutoLogin.pyw", "giwifi.py", "aes128.py", "monitor.py",
              "secure_store.py", "winutil.py", "wlanapi.py", "tray.py", "autostart.py",
-             "portal_guard.py", "make_icon.py", "make_release.py", "giwifi.ico",
+             "portal_guard.py", "make_icon.py", "make_release.py",
+             "installer.py", "make_installer.py", "giwifi.ico",
              "启动.bat", "打包exe.bat", "README.md", "使用说明.txt"]
 VENDOR_FILES = ["pylnk3.py", "pylnk3-LICENSE.txt"]
 
@@ -56,7 +57,7 @@ def build_exe(out_dir: str):
     """用 PyInstaller 打单文件 exe；返回 exe 路径"""
     dist = os.path.join(out_dir, "dist")
     work = os.path.join(out_dir, "work-%d" % int(time.time()))
-    log("[1/4] PyInstaller 打包中…（约 20 秒）")
+    log("[1/5] PyInstaller 打包中…（约 20 秒）")
     cmd = [sys.executable, "-m", "PyInstaller",
            "--noconfirm", "--onefile", "--noconsole",
            "--name", EXE_NAME,
@@ -79,8 +80,16 @@ def build_exe(out_dir: str):
     return exe
 
 
-def assemble(stage: str, exe: str):
-    log("[2/4] 组装发布目录…")
+def build_installer(main_exe: str, out_dir: str):
+    """构建「安装程序」exe（单文件、内嵌主程序、图形化安装/卸载）"""
+    log("[2/5] 构建安装程序…（内嵌主程序，约 1 分钟）")
+    sys.path.insert(0, HERE)
+    import make_installer
+    return make_installer.build(main_exe, out_dir)
+
+
+def assemble(stage: str, exe: str, installer_exe: str = ""):
+    log("[3/5] 组装发布目录…")
     if os.path.isdir(stage):
         shutil.rmtree(stage)
     src_dir = os.path.join(stage, "源码-备用")
@@ -88,6 +97,9 @@ def assemble(stage: str, exe: str):
 
     clean = clean_config()
     shutil.copy(exe, stage)
+    if installer_exe and os.path.isfile(installer_exe):
+        shutil.copy(installer_exe, stage)
+        log("      + 安装程序 %s" % os.path.basename(installer_exe))
     shutil.copy(os.path.join(HERE, "giwifi.ico"), stage)
     for f in ("README.md", "使用说明.txt"):
         p = os.path.join(HERE, f)
@@ -108,7 +120,7 @@ def assemble(stage: str, exe: str):
 
 
 def security_check(stage: str):
-    log("[3/4] 安全检查…")
+    log("[4/5] 安全检查…")
     real_path = os.path.join(HERE, "config.json")
     real_acct = real_enc = ""
     if os.path.isfile(real_path):
@@ -148,7 +160,7 @@ def security_check(stage: str):
 
 
 def make_zip(stage: str, out_dir: str):
-    log("[4/4] 压缩…")
+    log("[5/5] 压缩…")
     try:
         import giwifi
         ver = getattr(giwifi, "VERSION", "")
@@ -193,6 +205,15 @@ def desktop_dir():
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    # 前置检查：PyInstaller 按「当前解释器是否有 tkinter」决定打包哪些模块。
+    # 缺 tkinter 的解释器会构建出**界面打不开**的 exe（2026-10-06 踩过），直接拦下。
+    try:
+        import tkinter  # noqa: F401
+    except Exception:
+        raise SystemExit("❌ 当前解释器缺少 tkinter，构建出的 exe 将无法显示界面。\n"
+                         "   请改用带 tkinter 的完整版 Python 构建"
+                         "（如 Python Install Manager 的 pythoncore / 官方安装版，"
+                         "见 README「开发与打包」）。")
     out_dir = sys.argv[1] if len(sys.argv) > 1 else desktop_dir()
     os.makedirs(out_dir, exist_ok=True)
     build_root = os.path.join(HERE, "release")
@@ -203,7 +224,8 @@ def main():
     log(" 生成发布包 -> %s" % out_dir)
     log("=" * 56)
     exe = build_exe(build_root)
-    assemble(stage, exe)
+    installer_exe = build_installer(exe, os.path.join(build_root, "installer"))
+    assemble(stage, exe, installer_exe)
     security_check(stage)
     zip_path = make_zip(stage, out_dir)
     log("")
