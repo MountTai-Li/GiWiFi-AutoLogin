@@ -38,10 +38,22 @@ public class Prefs {
         return (p == null || p.trim().isEmpty()) ? DEFAULT_PORTAL : p.trim();
     }
     public boolean autoRun() { return sp.getBoolean("auto_run", false); }
+    /** 隐藏后台：不在「最近任务」中显示 */
+    public boolean hideRecents() { return sp.getBoolean("hide_recents", false); }
+    /** 隐藏通知栏：前台服务通知静默化（无图标、无声音） */
+    public boolean hideNotif() { return sp.getBoolean("hide_notif", false); }
+    /** 宿舍 WiFi 选择（空 = 不限制） */
+    public String wifiSsid() { return sp.getString("wifi_ssid", ""); }
+    /** captive_portal_mode 的原始值备份（-1 = 未改动过） */
+    public int cpmBackup() { return sp.getInt("cpm_backup", -1); }
 
     public void setUsername(String v) { sp.edit().putString("username", v == null ? "" : v.trim()).apply(); }
     public void setPortal(String v) { sp.edit().putString("portal", v == null ? "" : v.trim()).apply(); }
     public void setAutoRun(boolean v) { sp.edit().putBoolean("auto_run", v).apply(); }
+    public void setHideRecents(boolean v) { sp.edit().putBoolean("hide_recents", v).apply(); }
+    public void setHideNotif(boolean v) { sp.edit().putBoolean("hide_notif", v).apply(); }
+    public void setWifiSsid(String v) { sp.edit().putString("wifi_ssid", v == null ? "" : v.trim()).apply(); }
+    public void setCpmBackup(int v) { sp.edit().putInt("cpm_backup", v).apply(); }
 
     // ---------------- 密码（Keystore 加密） ----------------
     public String password() {

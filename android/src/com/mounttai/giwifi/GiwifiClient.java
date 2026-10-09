@@ -1,5 +1,10 @@
 package com.mounttai.giwifi;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
@@ -40,6 +45,8 @@ public class GiwifiClient {
     private final String authPath;
     private final int timeoutMs;
     private final Map<String, String> cookieMap = new LinkedHashMap<>();
+    /** 可选：把请求强制绑定到指定网络（WiFi），避免手机开着流量时被系统切到蜂窝网络 */
+    private Network bindNet;
 
     /** 全局登录互斥：避免「后台服务」和界面「立即登录」同时提交撞门户限频 */
     public static final Object GLOBAL_LOCK = new Object();
@@ -49,6 +56,27 @@ public class GiwifiClient {
         this.loginPath = loginPath;
         this.authPath = authPath;
         this.timeoutMs = Math.max(2, timeoutSec) * 1000;
+    }
+
+    /** 绑定到指定网络（传 null 恢复默认） */
+    public void setBindNetwork(Network n) {
+        this.bindNet = n;
+    }
+
+    /** 找到当前已连接的 WiFi 网络（找不到返回 null）；用于把请求绑到 WiFi 上 */
+    public static Network findWifiNetwork(Context ctx) {
+        try {
+            ConnectivityManager cm =
+                    (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return null;
+            for (Network n : cm.getAllNetworks()) {
+                NetworkCapabilities c = cm.getNetworkCapabilities(n);
+                if (c != null && c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    return n;
+                }
+            }
+        } catch (Exception ignored) { }
+        return null;
     }
 
     public static String rstripSlash(String s) {
@@ -95,7 +123,12 @@ public class GiwifiClient {
     private Resp request(String urlStr, String method, String postBody,
                          Map<String, String> extra, int timeoutOverrideMs) throws IOException {
         URL url = new URL(urlStr);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
+        HttpURLConnection c;
+        if (bindNet != null) {
+            c = (HttpURLConnection) bindNet.openConnection(url);
+        } else {
+            c = (HttpURLConnection) url.openConnection(Proxy.NO_PROXY);
+        }
         int to = timeoutOverrideMs > 0 ? timeoutOverrideMs : timeoutMs;
         c.setConnectTimeout(to);
         c.setReadTimeout(to);
@@ -278,6 +311,9 @@ public class GiwifiClient {
             String host = u.getHost();
             int port = u.getPort() > 0 ? u.getPort() : 80;
             Socket s = new Socket();
+            if (bindNet != null) {
+                bindNet.bindSocket(s);
+            }
             s.connect(new InetSocketAddress(host, port), 2000);
             s.close();
             return true;

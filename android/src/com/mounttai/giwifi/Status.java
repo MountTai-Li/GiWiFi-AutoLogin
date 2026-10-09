@@ -11,6 +11,7 @@ public class Status {
     public static final int FAIL = 6;
     public static final int NOPWD = 7;
     public static final int PAUSED = 8;
+    public static final int MISMATCH = 9;   // 当前 WiFi 与所选宿舍 WiFi 不符
 
     public static volatile int state = IDLE;
     public static volatile String detail = "";

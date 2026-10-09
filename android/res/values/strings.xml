@@ -4,12 +4,38 @@
     <string name="tip_account">校园网账号（通常是手机号）</string>
     <string name="tip_password">密码</string>
     <string name="tip_portal">门户地址（一般不用改）</string>
+    <string name="cb_show_pwd">显示密码</string>
     <string name="btn_save">保存配置</string>
     <string name="btn_login_now">立即登录</string>
     <string name="btn_open_portal">打开认证页面</string>
     <string name="btn_battery">后台保活设置</string>
     <string name="sw_auto">自动登录（后台常驻）</string>
     <string name="sw_auto_tip">开启后：只要连着 WiFi 且未联网，就自动完成校园网认证，掉线自动重连。建议同时点「后台保活设置」，允许自启动与后台运行（小米/华为等国产手机尤其需要），避免被系统杀掉。</string>
+
+    <string name="more_title">更多设置</string>
+    <string name="cb_hide_recents">隐藏后台（不在「最近任务」中显示）</string>
+    <string name="cb_hide_notif">隐藏通知栏（通知静默、无图标）</string>
+    <string name="tip_wifi_pick">宿舍 WiFi（只在这个网络上自动登录）</string>
+    <string name="btn_scan_wifi">扫描</string>
+    <string name="wifi_any">不限（任何 WiFi）</string>
+
+    <string name="help_title">使用说明（点按条目查看详情）</string>
+    <string name="help_1">① 快速上手：3 步开始用</string>
+    <string name="help_2">② 国产手机：请允许「自启动」</string>
+    <string name="help_3">③ 拦截系统登录弹窗（可选增强）</string>
+    <string name="help_4">④ 隐藏后台 / 隐藏通知栏</string>
+    <string name="help_5">⑤ 常见问题</string>
+    <string name="version_footer">GiWiFi自动登录 v1.1.0 · 认证协议与电脑版一致</string>
+
+    <string name="help_1_body">1. 填校园网账号（手机号）和密码 → 点「保存配置」。\n\n2. 打开「自动登录（后台常驻）」开关。\n\n3. 点「后台保活设置」，按系统提示允许（国产手机请允许自启动，见下条）。\n\n完成。之后连上校园 WiFi 会自动完成认证、掉线自动重登，全程不用打开网页输密码。</string>
+    <string name="help_2_body">小米/红米、华为/荣耀、OPPO/一加、vivo/iQOO 等系统默认会拦截应用自启动。\n\n点「后台保活设置」会自动跳到系统的自启动管理页，把本应用设为「允许自启动 / 允许后台运行」即可。\n\n否则重启手机后服务不会自动拉起（打开一次 App 即可恢复）。</string>
+    <string name="help_3_body">内置能力（无需设置）：App 检测到 WiFi 连接的瞬间就立刻开始认证（秒级响应）——绝大多数情况下，系统还没来得及弹出登录页，就已经联网了。\n\n彻底拦截（可选，需一次性授权）：用电脑给手机执行一条 adb 命令后，App 开启「自动登录」时会临时关闭系统的门户检测——系统彻底不再弹出/提示登录页；关闭自动登录时自动恢复原设置。\n\n授权命令：\nadb shell pm grant com.mounttai.giwifi android.permission.WRITE_SECURE_SETTINGS\n\n（手机需打开开发者选项中的「USB 调试」并用数据线连接电脑。此权限普通应用无法自行获取，属安卓系统限制；不授权不影响自动登录本身。）</string>
+    <string name="help_4_body">隐藏后台：开启后本应用不出现在「最近任务」列表里——后台照常干活，但在任务列表里看不到。\n\n隐藏通知栏：开启后后台通知变为静默版——状态栏没有图标、没有声音、不会打扰你（下拉通知栏最底部仍会保留一条，这是安卓对后台服务的强制要求，任何应用都无法完全去掉）。\n\n两个开关都只影响「显示」，不影响自动登录功能。</string>
+    <string name="help_5_body">Q：通知栏有一条「GiWiFi 自动登录」？\nA：这是后台服务在工作的标志；不想要图标可开启「隐藏通知栏」。\n\nQ：显示「已在线，无需登录」？\nA：当前网络已经通了，程序在安静等待，不用管它。\n\nQ：选了宿舍 WiFi 后为什么显示「非目标 WiFi」？\nA：当前连的不是你选的那个网络；切回宿舍 WiFi 就会自动登录。\n\nQ：换了手机 / 恢复出厂后要重新配置吗？\nA：要。密码加密绑定本机，换机后重填一次即可（设计如此）。\n\nQ：这个 App 需要什么权限？\nA：网络、通知（显示状态，可选）、WiFi 扫描与名称（用于选择宿舍 WiFi）、自启动。不读取通讯录、相册等任何隐私信息。</string>
+
+    <string name="guard_help_title">彻底拦截系统登录弹窗（可选）</string>
+    <string name="guard_help_body">内置的秒级认证已在工作，多数情况下系统来不及弹登录页就已联网。\n\n如需彻底关闭系统的门户检测（不再出现任何登录提示），按下面做一次性授权：\n\n1. 手机：设置 → 关于手机 → 连点「版本号」开启开发者选项，再打开「USB 调试」。\n\n2. 用数据线连电脑，电脑执行：\nadb shell pm grant com.mounttai.giwifi android.permission.WRITE_SECURE_SETTINGS\n\n3. 授权后重开「自动登录」开关即生效；关闭开关时系统设置会自动恢复原样。</string>
+
     <string name="log_title">运行日志</string>
     <string name="status_idle">未启动</string>
 </resources>

@@ -13,7 +13,7 @@ build_apk.py —— 安卓版手动构建脚本（无需 Gradle / Android Studio
     默认从 <工作区>/_android_sdk 读取，可用环境变量 GIWIFI_ANDROID_SDK 覆盖。
 
 流程：aapt2 compile → aapt2 link → javac → jar → d8 → 装 dex → zipalign → apksigner
-产物：out/GiWiFi自动登录-v1.0.0.apk
+产物：out/GiWiFi自动登录-v<版本>.apk
 """
 import glob
 import os
@@ -39,7 +39,7 @@ APKSIGNER = os.path.join(SDK, "build-tools", "apksigner.bat")
 ANDROID_JAR = os.path.join(SDK, "platform", "android.jar")
 
 APP_NAME = "GiWiFi自动登录"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 KEYSTORE = os.path.join(HERE, "giwifi-release.jks")
 KS_PASS_FILE = os.path.join(HERE, ".keystore-pass")   # 本地口令文件（.gitignore 已排除）
 KEY_ALIAS = "giwifi"
@@ -145,13 +145,16 @@ def main():
          "--java", gen_dir, res_zip])
 
     # ---------- 3) javac 编译 ----------
+    # 注意：必须带 -parameters。否则 javac 会给内部类构造器的合成参数
+    # （this$0）写出「名字为空」的 MethodParameters 属性，本机 d8（R8 8.2.2）
+    # 解析到空名会内部 NPE 报 "String.length() null"，导致匿名/内部类无法编译。
     log("[3/8] javac")
     sources = glob.glob(os.path.join(gen_dir, "**", "*.java"), recursive=True)
     sources += glob.glob(os.path.join(HERE, "src", "**", "*.java"), recursive=True)
     classes = os.path.join(BUILD, "classes")
     os.makedirs(classes, exist_ok=True)
     run([javac, "-encoding", "UTF-8", "-source", "8", "-target", "8",
-         "-Xlint:-options,-deprecation", "-classpath", ANDROID_JAR,
+         "-parameters", "-Xlint:-options,-deprecation", "-classpath", ANDROID_JAR,
          "-d", classes] + sources)
 
     # ---------- 4) 打包 class ----------
