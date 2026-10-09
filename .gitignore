@@ -46,3 +46,16 @@ desktop.ini
 *.tmp
 giwifi.quit
 giwifi.show
+
+# ============================================================
+#  安卓版构建产物 / 签名密钥 / 测试产物
+# ============================================================
+android/out/
+android/build/
+android/tools/out/
+android/tools/*_out.txt
+android/tools/diff.txt
+android/tools/login_page_sample.html
+android/d8_full.log
+android/*.jks
+android/.keystore-pass

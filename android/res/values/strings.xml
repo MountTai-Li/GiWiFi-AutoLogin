@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GiWiFi自动登录</string>
+    <string name="tip_account">校园网账号（通常是手机号）</string>
+    <string name="tip_password">密码</string>
+    <string name="tip_portal">门户地址（一般不用改）</string>
+    <string name="btn_save">保存配置</string>
+    <string name="btn_login_now">立即登录</string>
+    <string name="btn_open_portal">打开认证页面</string>
+    <string name="btn_battery">后台保活设置</string>
+    <string name="sw_auto">自动登录（后台常驻）</string>
+    <string name="sw_auto_tip">开启后：只要连着 WiFi 且未联网，就自动完成校园网认证，掉线自动重连。建议同时点「后台保活设置」，允许自启动与后台运行（小米/华为等国产手机尤其需要），避免被系统杀掉。</string>
+    <string name="log_title">运行日志</string>
+    <string name="status_idle">未启动</string>
+</resources>
