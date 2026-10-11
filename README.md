@@ -8,12 +8,12 @@
 
 📦 **Windows 版**（下载即用）：直接下载**安装程序**（一个 exe，双击安装即可 —— 无需 Python）：
 
-- 仓库内：[`安装包/GiWiFi自动登录助手-安装程序-v1.14.0.exe`](安装包/GiWiFi自动登录助手-安装程序-v1.14.0.exe)
+- 仓库内：[`Windows版安装包/GiWiFi自动登录助手-安装程序-v1.14.0.exe`](Windows版安装包/GiWiFi自动登录助手-安装程序-v1.14.0.exe)
 - 或 [Releases 页面](https://github.com/MountTai-Li/GiWiFi-AutoLogin/releases)
 
 📱 **Android 版**（下载即用）：直接下载 **APK** 装到手机 —— 连上校园 WiFi 后自动完成认证，全程不用打开网页：
 
-- 仓库内：[`安装包/安卓版-GiWiFi自动登录-v1.2.1.apk`](安装包/安卓版-GiWiFi自动登录-v1.2.1.apk)
+- 仓库内：[`安卓版安装包/GiWiFi自动登录-v1.2.1.apk`](安卓版安装包/GiWiFi自动登录-v1.2.1.apk)
 - 或 [安卓版 Release](https://github.com/MountTai-Li/GiWiFi-AutoLogin/releases/tag/android-v1.2.1)
 - 用法见 [二·五、安卓手机版](#二五安卓手机版)
 
