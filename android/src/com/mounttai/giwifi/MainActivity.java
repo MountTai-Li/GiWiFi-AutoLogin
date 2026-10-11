@@ -12,6 +12,7 @@ import android.net.Uri;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
+import android.net.wifi.WifiNetworkSuggestion;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -183,6 +184,7 @@ public class MainActivity extends Activity {
         // 打开界面时也同步一次（覆盖「服务未运行」时留下的变更）
         WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword(), prefs.wifiSecurity());
         findViewById(R.id.btnScanWifi).setOnClickListener(v -> ensureWifiPermThenScan());
+        findViewById(R.id.btnSaveSystem).setOnClickListener(v -> saveToSystemWifiList());
         tvGuard.setOnClickListener(v ->
                 showText(getString(R.string.guard_help_title), getString(R.string.guard_help_body)));
 
@@ -254,7 +256,12 @@ public class MainActivity extends Activity {
         WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword(), prefs.wifiSecurity());
         AppLog.add("配置已保存");
         if (toast) {
-            Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
+            if (!prefs.wifiSsid().isEmpty()) {
+                Toast.makeText(this, "已保存。若手机不自动连宿舍 WiFi，点下方「保存到系统 WiFi 列表」一次",
+                        Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
@@ -429,6 +436,45 @@ public class MainActivity extends Activity {
             return checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** 把所选宿舍 WiFi 交给系统「添加网络」对话框保存（一次性操作，之后系统按用户网络自动连接） */
+    private void saveToSystemWifiList() {
+        String ssid = prefs.wifiSsid();
+        if (ssid.isEmpty()) {
+            Toast.makeText(this, "请先在「宿舍 WiFi」里选择宿舍网络", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String pass = prefs.wifiPassword();
+        int sec = prefs.wifiSecurity();
+        WifiNetworkSuggestion.Builder b = new WifiNetworkSuggestion.Builder().setSsid(ssid);
+        if (!pass.isEmpty()) {
+            b.setWpa2Passphrase(pass);
+        } else if (sec != 0) {
+            Toast.makeText(this, "该网络未识别为无密码：请先点「扫描」识别，或填上 WiFi 密码",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        ArrayList<WifiNetworkSuggestion> list = new ArrayList<>();
+        list.add(b.build());
+        try {
+            Intent i;
+            if (Build.VERSION.SDK_INT >= 30) {
+                i = new Intent(Settings.ACTION_WIFI_ADD_NETWORKS);
+                i.putParcelableArrayListExtra(Settings.EXTRA_WIFI_NETWORK_LIST, list);
+                if (getPackageManager().resolveActivity(i, 0) == null) {
+                    // 个别系统没有该界面 → 回退到 WiFi 设置页手动添加
+                    i = new Intent(Settings.ACTION_WIFI_SETTINGS);
+                }
+            } else {
+                i = new Intent(Settings.ACTION_WIFI_SETTINGS);
+            }
+            startActivity(i);
+            AppLog.add("已打开系统「保存网络」对话框：「" + ssid + "」（在弹窗里点保存即可）");
+        } catch (Exception e) {
+            Toast.makeText(this, "此系统不支持该对话框，请到系统 WiFi 设置里手动添加「" + ssid + "」",
+                    Toast.LENGTH_LONG).show();
         }
     }
 

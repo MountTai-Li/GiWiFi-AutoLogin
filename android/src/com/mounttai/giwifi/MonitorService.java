@@ -333,12 +333,31 @@ public class MonitorService extends Service {
 
     // ================================================== WiFi 关闭时的自动开启
 
-    /** WiFi 关闭时：按设置尝试自动开启（系统允许时），或发一条「一键开启」通知 */
+    /** 无 WiFi 连接时：区分「WiFi 已关闭」（按设置尝试开启）与「WiFi 开着但没连上」（提示兜底方法） */
     private void handleWifiOff(Prefs p) {
         String ssid = p.wifiSsid();
+        boolean wifiOn = true;
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            wifiOn = wm != null && wm.isWifiEnabled();
+        } catch (Exception ignored) { }
+
+        if (wifiOn) {
+            // WiFi 开着但未连上任何网络
+            if (ssid.isEmpty()) {
+                Status.set(Status.NO_WIFI, "未连接 WiFi，等待中…");
+            } else {
+                Status.set(Status.NO_WIFI, "未连接任何 WiFi（已选「" + ssid
+                        + "」；若一直不自动连接，打开 App 点「保存到系统 WiFi 列表」一次）");
+            }
+            updateNotification();
+            return;
+        }
+
         boolean autoOn = p.autoWifiOn();
         if (!autoOn || ssid.isEmpty()) {
-            Status.set(Status.NO_WIFI, "未连接 WiFi，等待中…");
+            Status.set(Status.NO_WIFI, "WiFi 已关闭，等待中…");
             updateNotification();
             return;
         }
