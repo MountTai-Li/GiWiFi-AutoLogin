@@ -43,7 +43,7 @@ public class MainActivity extends Activity {
     private TextView tvWifiState, tvGuard;
     private ArrayAdapter<String> wifiAdapter;
     private final List<String> wifiItems = new ArrayList<>();
-    private boolean spLoading = false;
+    private String spinnerLast = null;   // 抑制 Spinner 初始化/重建时的重复回调
     private String wifiAnyLabel = "";
     private int tickCount = 0;
     private Prefs prefs;
@@ -143,8 +143,10 @@ public class MainActivity extends Activity {
         spWifi.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (spLoading) return;
+                if (position < 0 || position >= wifiItems.size()) return;
                 String v = wifiItems.get(position);
+                if (v.equals(spinnerLast)) return;   // 值与上次相同 = 初始/重建触发，忽略
+                spinnerLast = v;
                 boolean any = v.equals(wifiAnyLabel);
                 prefs.setWifiSsid(any ? "" : v);
                 AppLog.add(any ? "宿舍 WiFi 选择：不限" : "宿舍 WiFi 选择：" + v);
@@ -156,7 +158,6 @@ public class MainActivity extends Activity {
             @Override
             public void onNothingSelected(AdapterView<?> parent) { }
         });
-        spLoading = true;
         wifiItems.add(wifiAnyLabel);
         String savedSsid = prefs.wifiSsid();
         if (!savedSsid.isEmpty()) {
@@ -164,7 +165,7 @@ public class MainActivity extends Activity {
         }
         wifiAdapter.notifyDataSetChanged();
         spWifi.setSelection(savedSsid.isEmpty() ? 0 : 1);
-        spLoading = false;
+        spinnerLast = savedSsid.isEmpty() ? wifiAnyLabel : savedSsid;
         // 打开界面时也同步一次（覆盖「服务未运行」时留下的变更）
         WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword());
         findViewById(R.id.btnScanWifi).setOnClickListener(v -> ensureWifiPermThenScan());
@@ -494,7 +495,6 @@ public class MainActivity extends Activity {
                     return;
                 }
                 String saved = prefs.wifiSsid();
-                spLoading = true;
                 wifiItems.clear();
                 wifiItems.add(wifiAnyLabel);
                 wifiItems.addAll(ff);
@@ -503,7 +503,6 @@ public class MainActivity extends Activity {
                 }
                 wifiAdapter.notifyDataSetChanged();
                 spWifi.setSelection(saved.isEmpty() ? 0 : Math.max(0, wifiItems.indexOf(saved)));
-                spLoading = false;
                 Toast.makeText(this, ff.isEmpty()
                         ? "没扫到网络：请确认「定位」开关已打开、且已授予权限"
                         : "扫描完成：共 " + ff.size() + " 个网络", Toast.LENGTH_LONG).show();
