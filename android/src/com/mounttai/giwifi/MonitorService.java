@@ -187,7 +187,7 @@ public class MonitorService extends Service {
                 lastCycleAt = now;
 
                 // 0) 把「宿舍 WiFi」同步给系统（自动连接；仅在配置变化时执行）
-                WifiSuggester.syncIfChanged(this, p.wifiSsid(), p.wifiPassword());
+                WifiSuggester.syncIfChanged(this, p.wifiSsid(), p.wifiPassword(), p.wifiSecurity());
 
                 // 1) 找 WiFi 网络（连上即算，不要求它是系统默认网络）
                 Network wifiNet = GiwifiClient.findWifiNetwork(this);

@@ -39,7 +39,7 @@ APKSIGNER = os.path.join(SDK, "build-tools", "apksigner.bat")
 ANDROID_JAR = os.path.join(SDK, "platform", "android.jar")
 
 APP_NAME = "GiWiFi自动登录"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 KEYSTORE = os.path.join(HERE, "giwifi-release.jks")
 KS_PASS_FILE = os.path.join(HERE, ".keystore-pass")   # 本地口令文件（.gitignore 已排除）
 KEY_ALIAS = "giwifi"

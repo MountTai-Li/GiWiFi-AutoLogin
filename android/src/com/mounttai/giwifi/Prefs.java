@@ -44,6 +44,8 @@ public class Prefs {
     public boolean hideNotif() { return sp.getBoolean("hide_notif", false); }
     /** 宿舍 WiFi 选择（空 = 不限制） */
     public String wifiSsid() { return sp.getString("wifi_ssid", ""); }
+    /** 所选网络安全性：-1=未知，0=无密码（开放网络），1=有密码 */
+    public int wifiSecurity() { return sp.getInt("wifi_security", -1); }
     /** WiFi 关闭时是否自动开启（检测到宿舍 WiFi 后） */
     public boolean autoWifiOn() { return sp.getBoolean("auto_wifi_on", false); }
     /** captive_portal_mode 的原始值备份（-1 = 未改动过） */
@@ -55,6 +57,7 @@ public class Prefs {
     public void setHideRecents(boolean v) { sp.edit().putBoolean("hide_recents", v).apply(); }
     public void setHideNotif(boolean v) { sp.edit().putBoolean("hide_notif", v).apply(); }
     public void setWifiSsid(String v) { sp.edit().putString("wifi_ssid", v == null ? "" : v.trim()).apply(); }
+    public void setWifiSecurity(int v) { sp.edit().putInt("wifi_security", v).apply(); }
     public void setAutoWifiOn(boolean v) { sp.edit().putBoolean("auto_wifi_on", v).apply(); }
     public void setCpmBackup(int v) { sp.edit().putInt("cpm_backup", v).apply(); }
 

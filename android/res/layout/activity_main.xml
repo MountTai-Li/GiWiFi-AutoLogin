@@ -154,7 +154,7 @@
                 android:id="@+id/edWifiPwd"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="WiFi 密码（填上可自动连接）"
+                android:hint="WiFi 密码（有密码的网络才需要填）"
                 android:inputType="textPassword"
                 android:maxLines="1"
                 android:textSize="14sp" />

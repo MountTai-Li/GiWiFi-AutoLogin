@@ -30,7 +30,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 public class MainActivity extends Activity {
 
@@ -43,6 +46,8 @@ public class MainActivity extends Activity {
     private TextView tvWifiState, tvGuard;
     private ArrayAdapter<String> wifiAdapter;
     private final List<String> wifiItems = new ArrayList<>();
+    /** 扫描到的网络安全性：SSID → 0=无密码 / 1=有密码 */
+    private final Map<String, Integer> scanSec = new HashMap<>();
     private String spinnerLast = null;   // 抑制 Spinner 初始化/重建时的重复回调
     private String wifiAnyLabel = "";
     private int tickCount = 0;
@@ -149,8 +154,17 @@ public class MainActivity extends Activity {
                 spinnerLast = v;
                 boolean any = v.equals(wifiAnyLabel);
                 prefs.setWifiSsid(any ? "" : v);
-                AppLog.add(any ? "宿舍 WiFi 选择：不限" : "宿舍 WiFi 选择：" + v);
-                WifiSuggester.syncIfChanged(MainActivity.this, prefs.wifiSsid(), prefs.wifiPassword());
+                if (any) {
+                    prefs.setWifiSecurity(-1);
+                } else {
+                    Integer known = scanSec.get(v);
+                    prefs.setWifiSecurity(known == null ? -1 : known);
+                }
+                AppLog.add(any ? "宿舍 WiFi 选择：不限"
+                        : ("宿舍 WiFi 选择：" + v
+                        + (prefs.wifiSecurity() == 0 ? "（无密码网络）" : "")));
+                WifiSuggester.syncIfChanged(MainActivity.this, prefs.wifiSsid(),
+                        prefs.wifiPassword(), prefs.wifiSecurity());
                 if (MonitorService.running) {
                     MonitorService.start(MainActivity.this);   // 刷新服务状态
                 }
@@ -167,7 +181,7 @@ public class MainActivity extends Activity {
         spWifi.setSelection(savedSsid.isEmpty() ? 0 : 1);
         spinnerLast = savedSsid.isEmpty() ? wifiAnyLabel : savedSsid;
         // 打开界面时也同步一次（覆盖「服务未运行」时留下的变更）
-        WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword());
+        WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword(), prefs.wifiSecurity());
         findViewById(R.id.btnScanWifi).setOnClickListener(v -> ensureWifiPermThenScan());
         tvGuard.setOnClickListener(v ->
                 showText(getString(R.string.guard_help_title), getString(R.string.guard_help_body)));
@@ -237,7 +251,7 @@ public class MainActivity extends Activity {
             prefs.setWifiPassword(wp);  // 留空 = 不修改
         }
         // 同步给系统（自动连接）
-        WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword());
+        WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword(), prefs.wifiSecurity());
         AppLog.add("配置已保存");
         if (toast) {
             Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
@@ -454,11 +468,23 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** 判断扫描结果的安全性：0=无密码（开放网络）/ 1=有密码 */
+    private static int securityOf(ScanResult r) {
+        String caps = (r == null || r.capabilities == null) ? ""
+                : r.capabilities.toUpperCase(Locale.ROOT);
+        if (caps.contains("WPA") || caps.contains("WEP") || caps.contains("EAP")
+                || caps.contains("SAE") || caps.contains("OWE")) {
+            return 1;
+        }
+        return 0;
+    }
+
     /** 扫描附近 WiFi 并填充下拉列表（保留「不限」与已保存项） */
     private void startScan() {
         Toast.makeText(this, "扫描中…", Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             List<String> found = new ArrayList<>();
+            Map<String, Integer> secMap = new HashMap<>();
             String err = null;
             try {
                 WifiManager wm = (WifiManager) getApplicationContext()
@@ -477,9 +503,11 @@ public class MainActivity extends Activity {
                     List<ScanResult> results = wm.getScanResults();
                     if (results != null) {
                         for (ScanResult r : results) {
-                            if (r != null && r.SSID != null && !r.SSID.isEmpty()
-                                    && !found.contains(r.SSID)) {
-                                found.add(r.SSID);
+                            if (r != null && r.SSID != null && !r.SSID.isEmpty()) {
+                                secMap.put(r.SSID, securityOf(r));
+                                if (!found.contains(r.SSID)) {
+                                    found.add(r.SSID);
+                                }
                             }
                         }
                     }
@@ -489,11 +517,14 @@ public class MainActivity extends Activity {
             }
             final String ferr = err;
             final List<String> ff = found;
+            final Map<String, Integer> fsec = secMap;
             ui.post(() -> {
                 if (ferr != null) {
                     Toast.makeText(this, "扫描失败：" + ferr, Toast.LENGTH_LONG).show();
                     return;
                 }
+                scanSec.clear();
+                scanSec.putAll(fsec);
                 String saved = prefs.wifiSsid();
                 wifiItems.clear();
                 wifiItems.add(wifiAnyLabel);
@@ -503,6 +534,15 @@ public class MainActivity extends Activity {
                 }
                 wifiAdapter.notifyDataSetChanged();
                 spWifi.setSelection(saved.isEmpty() ? 0 : Math.max(0, wifiItems.indexOf(saved)));
+                // 本次扫描若获得了已选网络的安全性信息，更新并同步推荐（如：确认无密码 → 免密码自动连接）
+                if (!saved.isEmpty()) {
+                    Integer secNow = scanSec.get(saved);
+                    if (secNow != null && secNow != prefs.wifiSecurity()) {
+                        prefs.setWifiSecurity(secNow);
+                        WifiSuggester.syncIfChanged(MainActivity.this, saved,
+                                prefs.wifiPassword(), secNow);
+                    }
+                }
                 Toast.makeText(this, ff.isEmpty()
                         ? "没扫到网络：请确认「定位」开关已打开、且已授予权限"
                         : "扫描完成：共 " + ff.size() + " 个网络", Toast.LENGTH_LONG).show();
@@ -566,9 +606,11 @@ public class MainActivity extends Activity {
             String curText = cur.isEmpty()
                     ? (hasWifiPerm() ? "未连接 WiFi" : "需授权后显示")
                     : cur;
+            String selText = "已选择：" + saved
+                    + (prefs.wifiSecurity() == 0 ? "（无密码）" : "");
             tvWifiState.setText(saved.isEmpty()
                     ? "当前：" + curText + " ｜ 不限网络"
-                    : "当前：" + curText + " ｜ 已选择：" + saved);
+                    : "当前：" + curText + " ｜ " + selText);
 
             boolean guard;
             try {
