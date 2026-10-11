@@ -14,12 +14,15 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.net.wifi.ScanResult;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.SystemClock;
 import android.provider.Settings;
+
+import java.util.List;
 
 /**
  * 前台服务：连上 WiFi 后自动检测并完成校园网认证（与电脑版监控循环同逻辑）。
@@ -49,6 +52,9 @@ public class MonitorService extends Service {
     private Thread worker;
     private long lastTryAt = 0;
     private long lastCycleAt = 0;
+    private long lastWifiProbeAt = 0;
+    private long lastWifiNoticeAt = 0;
+    private long lastNudgeAt = 0;
     private Network lastWifiNet = null;
     private int lastNotifState = Integer.MIN_VALUE;
     private String lastNotifDetail = "\u0000";
@@ -180,11 +186,13 @@ public class MonitorService extends Service {
                 }
                 lastCycleAt = now;
 
+                // 0) 把「宿舍 WiFi」同步给系统（自动连接；仅在配置变化时执行）
+                WifiSuggester.syncIfChanged(this, p.wifiSsid(), p.wifiPassword());
+
                 // 1) 找 WiFi 网络（连上即算，不要求它是系统默认网络）
                 Network wifiNet = GiwifiClient.findWifiNetwork(this);
                 if (wifiNet == null) {
-                    Status.set(Status.NO_WIFI, "未连接 WiFi，等待中…");
-                    updateNotification();
+                    handleWifiOff(p);
                     park(5000);
                     continue;
                 }
@@ -206,7 +214,16 @@ public class MonitorService extends Service {
                     }
                     if (!cur.equals(want)) {
                         Status.set(Status.MISMATCH,
-                                "当前 WiFi「" + cur + "」与所选「" + want + "」不符，暂不登录");
+                                "当前 WiFi「" + cur + "」，等待切换到「" + want + "」…");
+                        // 轻推一下：触发扫描，促使系统按推荐重新评估
+                        if (now - lastNudgeAt > 60_000) {
+                            lastNudgeAt = now;
+                            try {
+                                WifiManager wm = (WifiManager) getApplicationContext()
+                                        .getSystemService(Context.WIFI_SERVICE);
+                                if (wm != null) wm.startScan();
+                            } catch (Exception ignored) { }
+                        }
                         updateNotification();
                         park(5000);
                         continue;
@@ -312,6 +329,101 @@ public class MonitorService extends Service {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    // ================================================== WiFi 关闭时的自动开启
+
+    /** WiFi 关闭时：按设置尝试自动开启（系统允许时），或发一条「一键开启」通知 */
+    private void handleWifiOff(Prefs p) {
+        String ssid = p.wifiSsid();
+        boolean autoOn = p.autoWifiOn();
+        if (!autoOn || ssid.isEmpty()) {
+            Status.set(Status.NO_WIFI, "未连接 WiFi，等待中…");
+            updateNotification();
+            return;
+        }
+        Status.set(Status.NO_WIFI, "WiFi 已关闭（检测到「" + ssid + "」会自动开启）");
+        updateNotification();
+
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastWifiProbeAt < 90_000) return;   // 最多 90 秒探测一次
+        lastWifiProbeAt = now;
+
+        if (!isSsidNearby(ssid)) return;              // 附近没有目标网络 → 静默等待
+
+        // 附近发现了目标网络 → 尝试自动打开 WiFi
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            boolean ok = wm != null && wm.setWifiEnabled(true);
+            if (ok) {
+                AppLog.add("检测到「" + ssid + "」，已自动打开 WiFi");
+                Status.set(Status.CHECKING, "已自动打开 WiFi，正在连接「" + ssid + "」…");
+                updateNotification();
+            } else if (now - lastWifiNoticeAt > 30 * 60_000) {
+                // Android 10+ 禁止应用静默开启 WiFi → 发一键开启通知（30 分钟最多一条）
+                lastWifiNoticeAt = now;
+                notifyEnableWifi(ssid);
+                AppLog.add("检测到「" + ssid + "」；系统限制应用直接开 WiFi，已发送一键开启通知");
+            }
+        } catch (Exception e) {
+            AppLog.add("自动打开 WiFi 失败：" + e.getMessage());
+        }
+    }
+
+    /** 检查目标 SSID 是否在附近（读取扫描结果；WiFi 关闭时依赖系统的「随时扫描」） */
+    private boolean isSsidNearby(String ssid) {
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return false;
+            try {
+                wm.startScan();
+            } catch (Exception ignored) { }
+            List<ScanResult> rs = wm.getScanResults();
+            if (rs != null) {
+                for (ScanResult r : rs) {
+                    if (r != null && ssid.equals(r.SSID)) return true;
+                }
+            }
+        } catch (Exception ignored) { }
+        return false;
+    }
+
+    /** 发送「点一下打开 WiFi」通知（点击直达系统网络面板 / WiFi 设置） */
+    private void notifyEnableWifi(String ssid) {
+        try {
+            Intent i;
+            if (Build.VERSION.SDK_INT >= 29) {
+                i = new Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                if (getPackageManager().resolveActivity(i, 0) == null) {
+                    i = new Intent(Settings.ACTION_WIFI_SETTINGS);
+                }
+            } else {
+                i = new Intent(Settings.ACTION_WIFI_SETTINGS);
+            }
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
+            PendingIntent pi = PendingIntent.getActivity(this, 1, i, flags);
+
+            Notification.Builder b;
+            if (Build.VERSION.SDK_INT >= 26) {
+                b = new Notification.Builder(this, CH_ID);
+            } else {
+                b = new Notification.Builder(this);
+            }
+            b.setSmallIcon(android.R.drawable.ic_dialog_alert)
+                    .setContentTitle("发现宿舍 WiFi「" + ssid + "」")
+                    .setContentText("点一下打开 WiFi，随后自动连接并完成认证")
+                    .setAutoCancel(true)
+                    .setContentIntent(pi)
+                    .setPriority(Notification.PRIORITY_HIGH);
+            NotificationManager nm =
+                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            nm.notify(2, b.build());
+        } catch (Exception ignored) { }
     }
 
     // ================================================== 系统登录弹窗拦截（需一次性授权）

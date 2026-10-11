@@ -34,11 +34,11 @@ import java.util.List;
 
 public class MainActivity extends Activity {
 
-    private EditText edUser, edPwd, edPortal;
+    private EditText edUser, edPwd, edPortal, edWifiPwd;
     private TextView statusText, statusDetail, tvLog;
     private View dot;
     private Switch swAuto;
-    private CompoundButton cbShowPwd, cbHideRecents, cbHideNotif;
+    private CompoundButton cbShowPwd, cbHideRecents, cbHideNotif, cbAutoWifiOn;
     private Spinner spWifi;
     private TextView tvWifiState, tvGuard;
     private ArrayAdapter<String> wifiAdapter;
@@ -61,6 +61,7 @@ public class MainActivity extends Activity {
         edUser = findViewById(R.id.edUser);
         edPwd = findViewById(R.id.edPwd);
         edPortal = findViewById(R.id.edPortal);
+        edWifiPwd = findViewById(R.id.edWifiPwd);
         statusText = findViewById(R.id.statusText);
         statusDetail = findViewById(R.id.statusDetail);
         tvLog = findViewById(R.id.tvLog);
@@ -74,6 +75,10 @@ public class MainActivity extends Activity {
             edPwd.setText(pw);
         }
         edPortal.setText(prefs.portal());
+        String wp = prefs.wifiPassword();
+        if (!wp.isEmpty()) {
+            edWifiPwd.setText(wp);
+        }
 
         // 自动登录开关（先设初值再挂监听，避免初始化误触发）
         swAuto.setChecked(prefs.autoRun());
@@ -116,6 +121,17 @@ public class MainActivity extends Activity {
             AppLog.add(c ? "已开启隐藏通知栏（静默通知）" : "已关闭隐藏通知栏");
         });
 
+        // ---- WiFi 关闭时自动开启 ----
+        cbAutoWifiOn = findViewById(R.id.cbAutoWifiOn);
+        cbAutoWifiOn.setChecked(prefs.autoWifiOn());
+        cbAutoWifiOn.setOnCheckedChangeListener((b, c) -> {
+            prefs.setAutoWifiOn(c);
+            AppLog.add(c ? "已开启：WiFi 关闭时会自动检测并开启" : "已关闭：WiFi 自动开启");
+            if (MonitorService.running) {
+                MonitorService.start(this);
+            }
+        });
+
         // ---- 宿舍 WiFi 选择 ----
         spWifi = findViewById(R.id.spWifi);
         tvWifiState = findViewById(R.id.tvWifiState);
@@ -132,6 +148,10 @@ public class MainActivity extends Activity {
                 boolean any = v.equals(wifiAnyLabel);
                 prefs.setWifiSsid(any ? "" : v);
                 AppLog.add(any ? "宿舍 WiFi 选择：不限" : "宿舍 WiFi 选择：" + v);
+                WifiSuggester.syncIfChanged(MainActivity.this, prefs.wifiSsid(), prefs.wifiPassword());
+                if (MonitorService.running) {
+                    MonitorService.start(MainActivity.this);   // 刷新服务状态
+                }
             }
             @Override
             public void onNothingSelected(AdapterView<?> parent) { }
@@ -145,6 +165,8 @@ public class MainActivity extends Activity {
         wifiAdapter.notifyDataSetChanged();
         spWifi.setSelection(savedSsid.isEmpty() ? 0 : 1);
         spLoading = false;
+        // 打开界面时也同步一次（覆盖「服务未运行」时留下的变更）
+        WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword());
         findViewById(R.id.btnScanWifi).setOnClickListener(v -> ensureWifiPermThenScan());
         tvGuard.setOnClickListener(v ->
                 showText(getString(R.string.guard_help_title), getString(R.string.guard_help_body)));
@@ -209,6 +231,12 @@ public class MainActivity extends Activity {
         if (!pw.isEmpty()) {
             prefs.setPassword(pw);      // 留空 = 不修改
         }
+        String wp = edWifiPwd.getText().toString();
+        if (!wp.isEmpty()) {
+            prefs.setWifiPassword(wp);  // 留空 = 不修改
+        }
+        // 同步给系统（自动连接）
+        WifiSuggester.syncIfChanged(this, prefs.wifiSsid(), prefs.wifiPassword());
         AppLog.add("配置已保存");
         if (toast) {
             Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
@@ -326,14 +354,20 @@ public class MainActivity extends Activity {
 
     // ================================================== 显示选项
 
-    /** 密码显示切换 */
+    /** 密码显示切换（账号密码 + WiFi 密码） */
     private void applyPwdVisibility(boolean show) {
-        int sel = edPwd.getSelectionEnd();
-        edPwd.setInputType(show
+        int type = show
                 ? (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)
-                : (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD));
+                : (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        int sel = edPwd.getSelectionEnd();
+        edPwd.setInputType(type);
         if (sel >= 0) {
             edPwd.setSelection(Math.min(sel, edPwd.getText().length()));
+        }
+        int sel2 = edWifiPwd.getSelectionEnd();
+        edWifiPwd.setInputType(type);
+        if (sel2 >= 0) {
+            edWifiPwd.setSelection(Math.min(sel2, edWifiPwd.getText().length()));
         }
     }
 

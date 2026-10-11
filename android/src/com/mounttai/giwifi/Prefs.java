@@ -44,6 +44,8 @@ public class Prefs {
     public boolean hideNotif() { return sp.getBoolean("hide_notif", false); }
     /** 宿舍 WiFi 选择（空 = 不限制） */
     public String wifiSsid() { return sp.getString("wifi_ssid", ""); }
+    /** WiFi 关闭时是否自动开启（检测到宿舍 WiFi 后） */
+    public boolean autoWifiOn() { return sp.getBoolean("auto_wifi_on", false); }
     /** captive_portal_mode 的原始值备份（-1 = 未改动过） */
     public int cpmBackup() { return sp.getInt("cpm_backup", -1); }
 
@@ -53,11 +55,19 @@ public class Prefs {
     public void setHideRecents(boolean v) { sp.edit().putBoolean("hide_recents", v).apply(); }
     public void setHideNotif(boolean v) { sp.edit().putBoolean("hide_notif", v).apply(); }
     public void setWifiSsid(String v) { sp.edit().putString("wifi_ssid", v == null ? "" : v.trim()).apply(); }
+    public void setAutoWifiOn(boolean v) { sp.edit().putBoolean("auto_wifi_on", v).apply(); }
     public void setCpmBackup(int v) { sp.edit().putInt("cpm_backup", v).apply(); }
 
     // ---------------- 密码（Keystore 加密） ----------------
-    public String password() {
-        String stored = sp.getString("password_enc", "");
+    public String password() { return getEnc("password_enc"); }
+    public void setPassword(String plain) { setEnc("password_enc", plain); }
+
+    /** 宿舍 WiFi 密码（用于自动连接；空 = 未设置） */
+    public String wifiPassword() { return getEnc("wifi_pass_enc"); }
+    public void setWifiPassword(String plain) { setEnc("wifi_pass_enc", plain); }
+
+    private String getEnc(String prefKey) {
+        String stored = sp.getString(prefKey, "");
         if (stored == null || stored.isEmpty()) return "";
         try {
             byte[] all = Base64.decode(stored, Base64.NO_WRAP);
@@ -73,9 +83,9 @@ public class Prefs {
         }
     }
 
-    public void setPassword(String plain) {
+    private void setEnc(String prefKey, String plain) {
         if (plain == null || plain.isEmpty()) {
-            sp.edit().putString("password_enc", "").apply();
+            sp.edit().putString(prefKey, "").apply();
             return;
         }
         try {
@@ -86,7 +96,7 @@ public class Prefs {
             byte[] all = new byte[iv.length + ct.length];
             System.arraycopy(iv, 0, all, 0, iv.length);
             System.arraycopy(ct, 0, all, iv.length, ct.length);
-            sp.edit().putString("password_enc", Base64.encodeToString(all, Base64.NO_WRAP)).apply();
+            sp.edit().putString(prefKey, Base64.encodeToString(all, Base64.NO_WRAP)).apply();
         } catch (Exception e) {
             AppLog.add("密码加密失败: " + e);
         }
