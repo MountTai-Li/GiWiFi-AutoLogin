@@ -6,102 +6,180 @@
 <title>GiWiFi 校园网认证工具箱 · 网页版</title>
 <meta name="description" content="校园网 GiWiFi 认证助手（网页版）：一键生成门户认证脚本、协议可视化演示、故障诊断向导。凭据仅在本地浏览器处理。">
 <style>
-  :root{
-    --green:#16a34a; --green-dark:#15803d; --green-bg:#f0fdf4;
-    --ink:#1f2937; --dim:#6b7280; --line:#e5e7eb; --bg:#f8faf9;
-    --card:#ffffff; --red:#dc2626; --amber:#d97706; --mono:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
-       background:var(--bg);color:var(--ink);line-height:1.6}
-  .wrap{max-width:960px;margin:0 auto;padding:0 16px}
-  header{background:linear-gradient(135deg,#14532d,#16a34a);color:#fff;padding:26px 0 20px}
-  header h1{margin:0;font-size:26px;letter-spacing:.5px}
-  header p{margin:6px 0 0;opacity:.92;font-size:14px}
-  .badge{display:inline-block;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);
-         border-radius:999px;padding:2px 10px;font-size:12px;margin-right:6px;margin-top:10px}
-  nav{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 0}
-  nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);
-             padding:9px 16px;border-radius:10px;cursor:pointer;font-size:14px}
-  nav button.on{background:var(--green);border-color:var(--green);color:#fff;font-weight:600}
-  main{padding:18px 0 40px}
-  section.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:14px}
-  h2{margin:0 0 4px;font-size:19px}
-  .sub{color:var(--dim);font-size:13px;margin:0 0 14px}
-  label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
-  input[type=text],input[type=password],textarea,select{width:100%;padding:9px 11px;border:1px solid var(--line);
-       border-radius:9px;font-size:14px;font-family:inherit;background:#fff;color:var(--ink)}
-  textarea{font-family:var(--mono);font-size:12.5px}
-  .row{display:flex;gap:12px;flex-wrap:wrap}
-  .row>div{flex:1;min-width:220px}
-  .btn{background:var(--green);border:none;color:#fff;padding:10px 18px;border-radius:10px;
-       font-size:14px;cursor:pointer;font-weight:600}
-  .btn:hover{background:var(--green-dark)}
-  .btn.ghost{background:#fff;color:var(--green-dark);border:1px solid var(--green)}
-  .btn.small{padding:6px 12px;font-size:13px;font-weight:400}
-  .steps{counter-reset:s;margin:14px 0 0;padding:0;list-style:none}
-  .steps li{counter-increment:s;position:relative;padding:8px 0 8px 40px;border-top:1px dashed var(--line);font-size:14px}
-  .steps li::before{content:counter(s);position:absolute;left:0;top:8px;width:26px;height:26px;border-radius:50%;
-       background:var(--green-bg);color:var(--green-dark);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}
-  code,pre{font-family:var(--mono)}
-  pre.code{background:#0f172a;color:#e2e8f0;padding:14px;border-radius:10px;overflow:auto;
-           font-size:12px;line-height:1.5;max-height:340px;white-space:pre}
-  .tag{display:inline-block;font-size:12px;border-radius:6px;padding:1px 8px;margin-right:6px}
-  .tag.ok{background:var(--green-bg);color:var(--green-dark)}
-  .tag.warn{background:#fffbeb;color:var(--amber)}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left}
-  th{background:#f1f5f9}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  @media(max-width:720px){.grid2{grid-template-columns:1fr}}
-  .dl{border:1px solid var(--line);border-radius:12px;padding:16px}
-  .dl h3{margin:0 0 6px;font-size:16px}
-  .dl p{margin:0 0 10px;font-size:13px;color:var(--dim)}
-  .qa button{display:block;width:100%;text-align:left;margin:8px 0;padding:12px 14px;border:1px solid var(--line);
-       border-radius:10px;background:#fff;cursor:pointer;font-size:14px}
-  .qa button:hover{border-color:var(--green);background:var(--green-bg)}
-  .qa .back{background:none;border:none;color:var(--green-dark);cursor:pointer;font-size:13px;padding:0}
-  .ans{font-size:14px}
-  .ans ol{margin:8px 0;padding-left:20px}
-  .ans li{margin:4px 0}
-  footer{border-top:1px solid var(--line);padding:18px 0 40px;color:var(--dim);font-size:12.5px}
-  .hide{display:none}
-  .selftest{margin:10px 0;padding:10px 14px;border-radius:10px;background:var(--green-bg);font-size:13px}
-  .kbd{background:#eef2f1;border:1px solid var(--line);border-radius:5px;padding:0 6px;font-family:var(--mono);font-size:12px}
-  .copied{color:var(--green-dark);font-size:13px;margin-left:10px}
-  a{color:var(--green-dark)}
+:root{
+  --bg:#0b1220; --panel:#0f1b2d; --panel2:#111f33; --line:#1e3a52;
+  --neon:#4ade80; --cyan:#22d3ee; --txt:#d7e3ee; --dim:#7d93a8;
+  --green-bg:rgba(74,222,128,.08); --green-line:#14532d;
+  --mono:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  background:radial-gradient(1200px 520px at 18% -10%,#12283d 0%,var(--bg) 62%);
+  color:var(--txt);line-height:1.65;min-height:100vh}
+.wrap{max-width:960px;margin:0 auto;padding:0 16px}
+a{color:var(--cyan)}
+a.btn{text-decoration:none;display:inline-block}
+
+/* ---------- 终端首屏 ---------- */
+.term{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  box-shadow:0 22px 60px rgba(0,0,0,.45);margin-top:24px}
+.term-head{display:flex;align-items:center;gap:7px;padding:10px 14px;background:#0c1727;border-bottom:1px solid var(--line)}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot.r{background:#ff5f56}.dot.y{background:#ffbd2e}.dot.g{background:#27c93f}
+.term-title{margin-left:8px;color:var(--dim);font-family:var(--mono);font-size:12px}
+.term-body{padding:18px 18px 22px}
+.boot-line{font-family:var(--mono);font-size:12.5px;opacity:0;animation:bootIn .45s ease forwards}
+.boot-line.l1{animation-delay:.05s}.boot-line.l2{animation-delay:.35s}
+.boot-line.l3{animation-delay:.65s}.boot-line.l4{animation-delay:.95s}
+.prompt{color:var(--cyan)}
+.cmd{color:#e8f4ff}
+.out{color:var(--dim)}
+.ok{color:var(--neon)}
+.hero-h{font-size:27px;font-weight:800;color:#fff;margin:14px 0 6px;letter-spacing:.5px}
+.hero-p{color:var(--dim);font-size:13px;font-family:var(--mono);margin:0}
+.cursor{color:var(--neon);animation:blink 1.1s steps(1) infinite}
+.chips{margin-top:14px}
+.badge{display:inline-block;background:rgba(34,211,238,.08);border:1px solid #155e75;color:#9adcf0;
+  border-radius:999px;padding:2px 10px;font-size:12px;margin:6px 6px 0 0;font-family:var(--mono)}
+@keyframes bootIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+
+/* ---------- 导航（分段功能页签，含过渡） ---------- */
+nav{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 0;background:#0a1424;
+  border:1px solid var(--line);border-radius:12px;padding:6px}
+nav button{flex:1 1 0;min-width:132px;border:1px solid transparent;background:#0f1b2d;color:#c2d4e6;
+  padding:11px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-family:var(--mono);font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:background-color .25s,color .25s,border-color .25s,box-shadow .25s}
+nav button .ic{font-size:15px;line-height:1}
+nav button:hover{background:#16273f;color:#fff;border-color:#2c5375}
+nav button.on{background:var(--neon);border-color:var(--neon);color:#052b12;font-weight:700;
+  box-shadow:0 0 18px rgba(74,222,128,.35)}
+
+/* ---------- 卡片与切换动画 ---------- */
+main{padding:16px 0 40px}
+section.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.view-in{animation:viewIn .3s cubic-bezier(.16,1,.3,1) both}
+@keyframes viewIn{from{opacity:0}to{opacity:1}}
+.view-out{animation:viewOut .22s ease-in both}
+@keyframes viewOut{from{opacity:1}to{opacity:0}}
+
+/* ---------- 文字与表单 ---------- */
+h2{margin:0 0 4px;font-size:18px;color:#fff}
+.sub{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+label{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px;font-family:var(--mono)}
+input[type=text],input[type=password],textarea,select{width:100%;padding:9px 11px;border:1px solid var(--line);
+  border-radius:8px;font-size:13px;background:#0a1424;color:#e6f1ff;font-family:var(--mono)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 3px rgba(74,222,128,.15)}
+textarea{font-size:12px}
+.row{display:flex;gap:12px;flex-wrap:wrap}.row>div{flex:1;min-width:220px}
+.btn{background:var(--neon);color:#052b12;border:none;border-radius:8px;padding:10px 20px;font-size:13px;
+  font-weight:700;cursor:pointer;font-family:var(--mono);box-shadow:0 0 16px rgba(74,222,128,.3);
+  transition:box-shadow .18s,transform .12s,background-color .18s}
+.btn:hover{box-shadow:0 0 26px rgba(74,222,128,.55);transform:translateY(-1px)}
+.btn.ghost{background:transparent;color:var(--cyan);border:1px solid var(--cyan);box-shadow:none}
+.btn.ghost:hover{background:rgba(34,211,238,.08)}
+.btn.small{padding:6px 12px;font-size:12px;font-weight:400}
+
+/* ---------- 门户地址识别提示 ---------- */
+.portal-hint{font-size:12px;margin-top:5px;min-height:16px;font-family:var(--mono)}
+.portal-hint.ok{color:var(--neon)}
+.portal-hint.bad{color:#fbbf24}
+.portal-hint code{color:var(--cyan);font-size:12px}
+
+/* ---------- 步骤 ---------- */
+.steps{counter-reset:s;margin:14px 0 0;padding:0;list-style:none}
+.steps li{counter-increment:s;position:relative;padding:8px 0 8px 40px;border-top:1px dashed #1c3550;font-size:13px}
+.steps li::before{content:counter(s);position:absolute;left:0;top:8px;width:26px;height:26px;border-radius:50%;
+  background:var(--green-bg);color:var(--neon);border:1px solid var(--green-line);font-weight:700;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-family:var(--mono)}
+.steps strong{color:#fff}
+
+/* ---------- 代码与标签 ---------- */
+code,pre{font-family:var(--mono)}
+pre.code{background:#050c16;border:1px solid #14324d;color:#9fd4b2;padding:14px;border-radius:10px;overflow:auto;
+  font-size:12px;line-height:1.6;max-height:340px;white-space:pre-wrap;word-break:break-all}
+.kbd{background:#0a1424;border:1px solid var(--line);border-radius:5px;padding:0 6px;font-family:var(--mono);
+  font-size:11px;color:var(--cyan)}
+.copied{color:var(--neon);font-size:12px;margin-left:10px;font-family:var(--mono)}
+.tag{display:inline-block;font-size:11px;border-radius:5px;padding:1px 8px;margin-right:6px;font-family:var(--mono)}
+.tag.ok{background:var(--green-bg);color:var(--neon);border:1px solid var(--green-line)}
+.tag.warn{background:rgba(217,119,6,.12);color:#fbbf24;border:1px solid #7c4a03}
+.selftest{margin:10px 0;padding:10px 14px;border-radius:10px;background:var(--green-bg);
+  border:1px solid var(--green-line);font-size:12.5px;color:var(--neon)}
+
+/* ---------- 表格 ---------- */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{border:1px solid #16304a;padding:7px 10px;text-align:left}
+th{background:#0a1828;color:var(--cyan);font-family:var(--mono)}
+td{color:#9fb8ce;font-family:var(--mono);font-size:11.5px}
+
+/* ---------- 下载与诊断 ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:720px){.grid2{grid-template-columns:1fr}.hero-h{font-size:22px}}
+.dl{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--panel2)}
+.dl h3{margin:0 0 6px;font-size:15px;color:#fff}
+.dl p{margin:0 0 10px;font-size:12.5px;color:var(--dim)}
+.qa button{display:block;width:100%;text-align:left;margin:8px 0;padding:12px 14px;border:1px solid var(--line);
+  border-radius:10px;background:#0a1424;color:var(--txt);cursor:pointer;font-size:13px;font-family:inherit;
+  transition:border-color .15s,background-color .15s}
+.qa button:hover{border-color:var(--neon);background:var(--green-bg)}
+.qa .back{background:none;border:none;color:var(--cyan);cursor:pointer;font-size:12px;padding:0;font-family:var(--mono)}
+.qa .back:hover{background:none;text-decoration:underline}
+.ans{font-size:13px}
+.ans ol{margin:8px 0;padding-left:20px}
+.ans li{margin:4px 0}
+
+footer{border-top:1px solid #16304a;padding:18px 0 40px;color:var(--dim);font-size:12px}
+footer strong{color:#c4d5e4}
+.hide{display:none}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap">
-    <h1>GiWiFi 校园网认证工具箱</h1>
-    <p>网页版 · 一键生成门户认证脚本 · 协议透明可验证 · 凭据只在你的浏览器里处理</p>
-    <span class="badge">开源 · MIT</span><span class="badge">零第三方依赖</span><span class="badge">配套 Windows / 安卓客户端</span>
+<div class="wrap">
+  <div class="term">
+    <div class="term-head">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="term-title">giwifi@campus: ~/toolkit — 80x24</span>
+    </div>
+    <div class="term-body">
+      <div class="boot-line l1"><span class="prompt">giwifi@campus:~$</span> <span class="cmd">./campus-auth-toolkit</span></div>
+      <div class="out boot-line l2">[init] 载入 GiWiFi 认证内核 v1.0 (web) … <span class="ok">OK</span></div>
+      <div class="out boot-line l3">[crypto] AES-128-CBC / ZeroPadding … <span class="ok">3/3 自检通过</span></div>
+      <div class="out boot-line l4">[privacy] 凭据仅在本地处理，不经过任何服务器 … <span class="ok">ON</span></div>
+      <h1 class="hero-h">GiWiFi 校园网认证工具箱<span class="cursor">▌</span></h1>
+      <p class="hero-p">// 一键生成门户认证脚本 · 协议透明可验证 · 三端同源</p>
+      <div class="chips">
+        <span class="badge">开源 · MIT</span><span class="badge">零第三方依赖</span><span class="badge">配套 Windows / 安卓客户端</span>
+      </div>
+    </div>
   </div>
-</header>
+</div>
 
 <div class="wrap">
   <nav>
-    <button data-tab="auth" class="on">一键认证</button>
-    <button data-tab="proto">协议演示</button>
-    <button data-tab="diag">故障诊断</button>
-    <button data-tab="dl">客户端下载</button>
+    <button data-tab="auth" class="on"><span class="ic">⚡</span>一键认证</button>
+    <button data-tab="proto"><span class="ic">🔐</span>协议演示</button>
+    <button data-tab="diag"><span class="ic">🧭</span>故障诊断</button>
+    <button data-tab="dl"><span class="ic">📦</span>客户端下载</button>
   </nav>
 </div>
 
 <main class="wrap">
 
   <!-- ============ Tab 1 一键认证 ============ -->
-  <section id="tab-auth" class="card">
+  <section id="tab-auth" class="card view-in">
     <h2>一键认证脚本生成器</h2>
-    <p class="sub">填入你的门户地址和校园网账号，生成一段认证脚本；在校园网内打开门户登录页，把它粘到浏览器控制台（按 <span class="kbd">F12</span> → <span class="kbd">Console</span>）回车，即可完成认证。整个过程在你的浏览器本地完成，本页面不收集、不上传任何信息。</p>
+    <p class="sub">粘贴你学校认证页面的网址（自动识别门户地址），填入校园网账号密码，生成一段认证脚本；在校园网内打开门户登录页，把它粘到浏览器控制台（按 <span class="kbd">F12</span> → <span class="kbd">Console</span>）回车，即可完成认证。整个过程在你的浏览器本地完成，本页面不收集、不上传任何信息。</p>
 
     <div class="row">
       <div>
-        <label>门户地址（学校认证页的网址，形如 http://x.x.x.x）</label>
-        <input type="text" id="inPortal" placeholder="例如：http://192.168.x.x" autocomplete="off">
+        <label>校园网认证页面网址（打开学校认证页，把浏览器地址栏整段复制粘贴）</label>
+        <input type="text" id="inPortal" placeholder="粘贴你学校认证页的网址，自动识别门户地址" autocomplete="off">
+        <div class="portal-hint" id="portalHint"></div>
       </div>
       <div>
         <label>认证方式</label>
@@ -191,15 +269,16 @@
       <div class="dl">
         <h3>🖥 Windows 客户端</h3>
         <p>开机自启 · 掉线自动重登 · 拦截系统登录弹窗 · 托盘可选完全隐藏 · DPAPI 加密保存密码</p>
-        <a class="btn small" href="https://github.com/MountTai-Li/GiWiFi-AutoLogin/releases/latest" target="_blank" rel="noopener">下载安装程序（v1.14.0）</a>
+        <a class="btn small" href="dl/GiWiFi-Setup-v1.14.0.exe" download>下载安装程序（v1.14.0）</a>
       </div>
       <div class="dl">
         <h3>📱 安卓客户端</h3>
         <p>连上宿舍 Wi-Fi 自动认证 · 无密码网络自动识别与自动连接 · 厂商自启动引导 · 日志持久化</p>
-        <a class="btn small" href="https://github.com/MountTai-Li/GiWiFi-AutoLogin/releases/download/android-v1.2.3/GiWiFi-AutoLogin-Android-v1.2.3.apk" target="_blank" rel="noopener">下载 APK（v1.2.3）</a>
+        <a class="btn small" href="dl/GiWiFi-Android-v1.2.3.apk" download>下载 APK（v1.2.3）</a>
       </div>
     </div>
     <p style="margin-top:14px;font-size:13px;color:var(--dim)">
+      两个下载按钮均为<strong>本作品域名直链下载</strong>（无需访问 GitHub）。
       源码仓库（MIT 协议，零第三方依赖，认证协议与网页版同源）：
       <a href="https://github.com/MountTai-Li/GiWiFi-AutoLogin" target="_blank" rel="noopener">github.com/MountTai-Li/GiWiFi-AutoLogin</a>
     </p>
@@ -217,34 +296,90 @@
 <script>
 'use strict';
 /* ============ 标签页切换 ============ */
+/* ============ 标签页切换（淡出 → 淡入 的交叉淡化） ============ */
+var tabTimer = null;
+function showTab(t) {
+  var target = document.getElementById('tab-' + t);
+  var current = document.querySelector('main section.card:not(.hide)');
+  if (current === target) return;
+  function showTarget() {
+    target.classList.remove('hide');
+    target.classList.remove('view-in');
+    void target.offsetWidth;              // 强制回流 → 重播淡入动画
+    target.classList.add('view-in');
+  }
+  if (tabTimer) { clearTimeout(tabTimer); tabTimer = null; }
+  if (current) {
+    current.classList.remove('view-in');
+    current.classList.add('view-out');    // 旧卡片先淡出，再切换
+    tabTimer = setTimeout(function () {
+      current.classList.add('hide');
+      current.classList.remove('view-out');
+      showTarget();
+      tabTimer = null;
+    }, 220);
+  } else {
+    showTarget();
+  }
+}
 document.querySelectorAll('nav button').forEach(function (b) {
   b.addEventListener('click', function () {
     document.querySelectorAll('nav button').forEach(function (x) { x.classList.remove('on'); });
     b.classList.add('on');
-    ['auth', 'proto', 'diag', 'dl'].forEach(function (t) {
-      document.getElementById('tab-' + t).classList.toggle('hide', t !== b.dataset.tab);
-    });
+    showTab(b.dataset.tab);
   });
 });
+
+/* ============ 门户地址自动识别：粘贴认证页网址 → 提取 协议://主机:端口 ============ */
+function parsePortal(raw) {
+  var s = (raw || '').trim();
+  if (!s) return null;
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(s)) s = 'http://' + s;   // 没写协议自动补 http://
+  try {
+    var u = new URL(s);
+    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !u.hostname) return null;
+    return { origin: u.origin, full: s };
+  } catch (e) { return null; }
+}
+
+var portalParsed = null;
+function refreshPortalHint() {
+  var raw = document.getElementById('inPortal').value;
+  portalParsed = parsePortal(raw);
+  var hint = document.getElementById('portalHint');
+  if (!raw.trim()) { hint.textContent = ''; hint.className = 'portal-hint'; return; }
+  if (portalParsed) {
+    hint.innerHTML = '已识别门户地址：<code>' + portalParsed.origin + '</code> ✓（可直接改，改完会重新识别）';
+    hint.className = 'portal-hint ok';
+  } else {
+    hint.textContent = '网址格式无法识别，请粘贴浏览器地址栏里的完整网址';
+    hint.className = 'portal-hint bad';
+  }
+}
+document.getElementById('inPortal').addEventListener('input', refreshPortalHint);
+document.getElementById('inPortal').addEventListener('paste', function () { setTimeout(refreshPortalHint, 0); });
 
 /* ============ 记住门户地址与账号（不存密码）============ */
 try {
   document.getElementById('inPortal').value = localStorage.getItem('gw_portal') || '';
   document.getElementById('inUser').value = localStorage.getItem('gw_user') || '';
 } catch (e) { }
+refreshPortalHint();
 
 /* ============ 生成脚本（实现在 app-core.js，页面与测试共用同一份代码）============ */
 document.getElementById('btnGen').addEventListener('click', function () {
-  var portal = document.getElementById('inPortal').value.trim().replace(/\/+$/, '');
+  var raw = document.getElementById('inPortal').value;
+  var parsed = parsePortal(raw);
   var user = document.getElementById('inUser').value.trim();
   var pass = document.getElementById('inPass').value;
   var mode = document.getElementById('inMode').value;
-  if (!portal || !/^https?:\/\//i.test(portal)) { alert('请先填写门户地址（以 http:// 开头）'); return; }
+  if (!parsed) { alert('请先粘贴你学校认证页面的网址（浏览器地址栏整段复制），识别不了的话检查格式'); return; }
   if (!user || !pass) { alert('请填写校园网账号和密码'); return; }
-  try { localStorage.setItem('gw_portal', portal); localStorage.setItem('gw_user', user); } catch (e) { }
+  try { localStorage.setItem('gw_portal', raw.trim()); localStorage.setItem('gw_user', user); } catch (e) { }
 
   var script = GiApp.buildScript(mode, user, pass);
-  document.getElementById('genPortal').textContent = portal;
+  document.getElementById('genCode').textContent = script;   // 把生成的脚本写回代码框
+  document.getElementById('genPortal').textContent = parsed.full;
   document.getElementById('genOut').classList.remove('hide');
   document.getElementById('copyTip').classList.add('hide');
 });
@@ -284,7 +419,14 @@ function runDemo() {
          '</code></td><td><code>' + row.cipher + '</code></td></tr>';
   });
   h += '</table><p>最终提交的 Base64 密文：</p><pre class="code">' + r.b64 + '</pre>';
-  box.innerHTML = h;
+  box.classList.remove('view-in');
+  box.classList.add('view-out');
+  setTimeout(function () {
+    box.innerHTML = h;
+    box.classList.remove('view-out');
+    void box.offsetWidth;
+    box.classList.add('view-in');
+  }, 200);
 }
 document.getElementById('btnDemo').addEventListener('click', runDemo);
 
@@ -386,10 +528,17 @@ function renderDiag(key) {
     node.ans.forEach(function (s) { h += '<li>' + s + '</li>'; });
     h += '</ol></div>';
   }
-  box.innerHTML = h;
-  box.querySelectorAll('[data-go]').forEach(function (b) {
-    b.addEventListener('click', function () { renderDiag(b.dataset.go); });
-  });
+  box.classList.remove('view-in');
+  box.classList.add('view-out');          // 问答切换：先淡出再淡入
+  setTimeout(function () {
+    box.innerHTML = h;
+    box.classList.remove('view-out');
+    void box.offsetWidth;
+    box.classList.add('view-in');
+    box.querySelectorAll('[data-go]').forEach(function (b) {
+      b.addEventListener('click', function () { renderDiag(b.dataset.go); });
+    });
+  }, 200);
 }
 renderDiag('start');
 </script>
