@@ -9,6 +9,7 @@
     <string name="btn_login_now">立即登录</string>
     <string name="btn_open_portal">打开认证页面</string>
     <string name="btn_battery">后台保活设置</string>
+    <string name="btn_stop">停止并退出程序</string>
     <string name="sw_auto">自动登录（后台常驻）</string>
     <string name="sw_auto_tip">开启后：只要连着 WiFi 且未联网，就自动完成校园网认证，掉线自动重连。建议同时点「后台保活设置」，允许自启动与后台运行（小米/华为等国产手机尤其需要），避免被系统杀掉。</string>
 
@@ -28,7 +29,7 @@
     <string name="help_3">③ 拦截系统登录弹窗（可选增强）</string>
     <string name="help_4">④ 隐藏后台 / 隐藏通知栏</string>
     <string name="help_5">⑤ 常见问题</string>
-    <string name="version_footer">GiWiFi自动登录 v1.2.2 · 认证协议与电脑版一致</string>
+    <string name="version_footer">GiWiFi自动登录 v1.2.3 · 认证协议与电脑版一致</string>
 
     <string name="help_1_body">1. 填校园网账号（手机号）和密码 → 点「保存配置」。\n\n2. 点「扫描」，从下拉框选中你宿舍的 WiFi。无密码的网络不用填任何密码——App 会自动识别并把它推荐给系统自动连接；有密码的网络才需要在「宿舍 WiFi 密码」里填上密码（系统里已保存过也可留空）。\n\n（若手机还是不会自动连接：点「保存到系统 WiFi 列表」，在系统弹窗里点一次保存，之后系统会像对待自己保存的网络一样自动连接。）\n\n3. 打开「自动登录（后台常驻）」开关。\n\n4. 点「后台保活设置」，按系统提示允许（国产手机请允许自启动，见下条）。\n\n完成。之后连上宿舍 WiFi 会自动完成认证、掉线自动重登，全程不用打开网页输密码。</string>
     <string name="help_2_body">小米/红米、华为/荣耀、OPPO/一加、vivo/iQOO 等系统默认会拦截应用自启动。\n\n点「后台保活设置」会自动跳到系统的自启动管理页，把本应用设为「允许自启动 / 允许后台运行」即可。\n\n否则重启手机后服务不会自动拉起（打开一次 App 即可恢复）。</string>

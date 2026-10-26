@@ -104,6 +104,17 @@ public class MainActivity extends Activity {
         findViewById(R.id.btnOpenPortal).setOnClickListener(v -> openPortal());
         findViewById(R.id.btnBattery).setOnClickListener(v -> requestBattery());
 
+        // ---- 停止并退出程序：停止后台服务 + 关闭自动登录 + 退出界面和进程 ----
+        findViewById(R.id.btnStop).setOnClickListener(v -> {
+            prefs.setAutoRun(false);
+            MonitorService.stop(this);          // 停服务（同时撤掉通知）
+            AppLog.add("已停止并退出程序");
+            Toast.makeText(this, "已停止并退出。下次需要使用：打开 App 重新开启自动登录",
+                    Toast.LENGTH_LONG).show();
+            finishAndRemoveTask();              // 关闭界面并从最近任务移除
+            ui.postDelayed(() -> android.os.Process.killProcess(android.os.Process.myPid()), 600);
+        });
+
         // ---- 密码显示切换 ----
         cbShowPwd = findViewById(R.id.cbShowPwd);
         cbShowPwd.setOnCheckedChangeListener((b, c) -> applyPwdVisibility(c));

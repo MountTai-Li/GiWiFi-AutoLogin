@@ -252,6 +252,13 @@
                     android:layout_weight="1"
                     android:text="@string/btn_battery" />
             </LinearLayout>
+
+            <Button
+                android:id="@+id/btnStop"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/btn_stop" />
         </LinearLayout>
 
         <!-- ============ 更多设置卡片 ============ -->
